@@ -1,0 +1,2445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Poker Log">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Poker Log</title>
+<script src="storage.js"></script>
+<script src="charts.js"></script>
+<script src="nash.js"></script>
+<script src="poker.js"></script>
+<script src="dealer.js"></script>
+<script src="postflop.js"></script>
+<script src="handeval.js"></script>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --card2:#1e222c; --line:#2a2f3a;
+    --text:#e8eaf0; --dim:#8b93a3; --gold:#e0a93e; --green:#3ec97e; --red:#ff5c5c;
+    --spade:#dfe5ec; --heart:#ff5c5c; --diamond:#4da3ff; --club:#3ec97e;
+    /* One knob for the width ceiling. Phone-shaped layouts stretched across a tablet read as
+       unfinished; this keeps the column deliberate at any size. */
+    --maxw:620px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  /* Paint the status-bar inset. Without this, content scrolls under the clock and the
+     Dynamic Island with nothing behind it — cosmetic against text, genuinely unreadable
+     when a bright button passes beneath. */
+  body::before{content:''; position:fixed; top:0; left:0; right:0; z-index:30;
+    height:env(safe-area-inset-top); background:var(--bg)}
+  header{position:sticky; top:0; z-index:16; background:var(--bg)}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
+    font:16px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
+  body{padding-bottom:calc(66px + env(safe-area-inset-bottom))}
+  button{touch-action:manipulation; -webkit-user-select:none; user-select:none; font-family:inherit}
+  header{padding:calc(10px + env(safe-area-inset-top)) 16px 8px; display:flex; align-items:baseline; gap:8px;
+    max-width:var(--maxw); margin:0 auto; width:100%}
+  main{max-width:var(--maxw); margin:0 auto; width:100%}
+  header h1{font-size:17px; margin:0; letter-spacing:.12em}
+  header h1 span{color:var(--gold)}
+  header .hstat{margin-left:auto; color:var(--dim); font-size:12.5px; display:flex; align-items:center; gap:5px}
+  .dot{width:8px; height:8px; border-radius:99px; background:var(--dim); display:inline-block}
+  .dot.ok{background:var(--green)} .dot.fail{background:var(--red)} .dot.pending{background:var(--gold)}
+  main{padding:0 12px}
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px; margin-bottom:12px}
+  label.lab{display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin:10px 0 4px}
+  label.lab .hint{text-transform:none; letter-spacing:0}
+  input[type=text],input[type=number],input[type=date],textarea{
+    width:100%; min-width:0; max-width:100%; background:var(--card2); color:var(--text);
+    border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:16px;
+    outline:none; font-family:inherit; box-sizing:border-box; min-height:46px}
+  /* The native date control sizes itself to its shadow content and ignores width:100%.
+     Dropping the platform appearance is the only thing that makes it obey the column. */
+  input[type=date]{-webkit-appearance:none; appearance:none; display:block; height:46px;
+    line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  input[type=date]::-webkit-date-and-time-value{text-align:left; margin:0}
+  input[type=date]::-webkit-calendar-picker-indicator{margin:0; padding:0}
+  /* iOS scrolls a focused field to the viewport top, which now sits UNDER the sticky
+     header. Reserve that height so it lands below it instead. */
+  input,textarea,select{scroll-margin-top:calc(96px + env(safe-area-inset-top))}
+  textarea{font-family:ui-monospace,SFMono-Regular,Menlo,monospace; min-height:76px; resize:vertical}
+  .seg{min-height:46px}
+  input:focus,textarea:focus{border-color:var(--gold)}
+  .row{display:flex; gap:8px; align-items:flex-end}
+  .row>*{flex:1; min-width:0}
+  .row .lab{margin-top:0}
+  .seg{display:flex; background:var(--card2); border:1px solid var(--line); border-radius:10px; overflow:hidden}
+  .seg button{flex:1; height:44px; padding:0; background:none; border:0; color:var(--dim); font-size:14px; font-weight:600}
+  .seg button.on{background:var(--gold); color:#14161b}
+  .seg.wl button.on[data-v="+"]{background:var(--green); color:#0c1410}
+  .seg.wl button.on[data-v="-"]{background:var(--red); color:#1c0e0e}
+  .grid8{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
+  .pos{padding:12px 0; border-radius:10px; border:1px solid var(--line); background:var(--card2);
+    color:var(--dim); font-weight:700; font-size:14px}
+  .pos.on{border-color:var(--gold); color:var(--gold); background:rgba(224,169,62,.12)}
+  .slots{display:flex; gap:10px}
+  .slot{flex:1; height:62px; border-radius:12px; border:1.5px dashed var(--line); background:var(--card2);
+    display:flex; align-items:center; justify-content:center; font-size:27px; font-weight:700; color:var(--dim)}
+  .slot.filled{border-style:solid; border-color:var(--gold); color:var(--text)}
+  .suit-s{color:var(--spade)} .suit-h{color:var(--heart)} .suit-d{color:var(--diamond)} .suit-c{color:var(--club)}
+  .toks{display:flex; gap:5px; flex-wrap:wrap; margin:6px 0 8px}
+  .toks button{padding:9px 0; border-radius:9px; border:1px solid var(--line); background:var(--card2);
+    color:var(--text); font-size:14px; font-weight:700; flex:1; min-width:34px; font-family:ui-monospace,Menlo,monospace}
+  .toks button.wide{flex:2}
+  .btn{display:block; width:100%; padding:14px; border:0; border-radius:12px; background:var(--gold);
+    color:#14161b; font-size:16px; font-weight:800; letter-spacing:.04em}
+  .btn:active{transform:scale(.99)}
+  .btn.ghost{background:var(--card2); color:var(--text); border:1px solid var(--line); font-weight:600}
+  .btn.danger{background:none; border:1px solid var(--red); color:var(--red)}
+  .mini{font-size:13px; color:var(--dim)}
+  .refnote{margin-top:8px; padding:8px 10px; border-left:2px solid var(--gold); background:rgba(224,169,62,.06); border-radius:4px; font-size:12.5px; line-height:1.5; color:var(--text)}
+  .reviewtag{margin:0 0 8px; padding:7px 9px; border-left:2px solid var(--gold); background:rgba(224,169,62,.10); border-radius:4px; font-size:12.5px; line-height:1.45; color:var(--text)}
+  .rvw{color:var(--gold)}
+  .flagbtn{padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card2); color:var(--dim); font-size:14px; font-weight:700}
+  .flagbtn.on{border-color:var(--gold); color:var(--gold)}
+  #savedCard{border:1px solid var(--green); border-radius:12px; padding:10px 12px; margin-bottom:10px;
+    background:rgba(62,201,126,.08); font-size:14px; display:flex; align-items:center; gap:8px}
+  #savedCard b{color:var(--green)}
+  #savedCard button{margin-left:auto; background:none; border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:6px 10px; font-size:13px}
+  #editBar{border:1px solid var(--gold); border-radius:12px; padding:10px 12px; margin-bottom:10px;
+    background:rgba(224,169,62,.08); font-size:14px; display:flex; align-items:center}
+  #editBar button{margin-left:auto; background:none; border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:6px 10px; font-size:13px}
+  .sessbtn{display:block; width:100%; margin-top:8px; padding:10px; border-radius:10px; border:1px dashed var(--line);
+    background:none; color:var(--text); font-size:13.5px; font-weight:600; text-align:left}
+  .sessbtn .dim{font-weight:400}
+  .sessbar{display:flex; align-items:center; gap:6px; margin-top:8px; padding:9px 12px; border-radius:10px;
+    border:1px solid var(--green); background:rgba(62,201,126,.08); font-size:13.5px}
+  .sessbar .live{color:var(--green)}
+  .sessbar button{margin-left:auto; background:none; border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:5px 10px; font-size:12.5px}
+  #endBanner{border:1px solid var(--gold); background:rgba(224,169,62,.08); border-radius:10px;
+    padding:9px 12px; font-size:13.5px; margin-bottom:10px}
+  .filters{display:flex; gap:6px; margin-bottom:8px}
+  .filters button{padding:7px 14px; border-radius:99px; border:1px solid var(--line); background:var(--card2);
+    color:var(--dim); font-size:13px; font-weight:600}
+  .filters button.on{border-color:var(--gold); color:var(--gold)}
+  .dayhead{display:flex; justify-content:space-between; align-items:baseline; padding:12px 2px 4px;
+    font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim)}
+  .dayhead .dnet{font-weight:700; text-transform:none; letter-spacing:0}
+  .item{border-top:1px solid var(--line); padding:10px 2px}
+  .item .top{display:flex; justify-content:space-between; gap:8px; align-items:center}
+  .item .sum{font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .item .sum .cards{font-weight:700}
+  .item .net{font-weight:800; font-size:14px; flex-shrink:0}
+  .pos-net{color:var(--green)} .neg-net{color:var(--red)} .zero-net{color:var(--dim)}
+  .item .detail{margin-top:8px}
+  .street{display:flex; gap:8px; padding:3px 0; font-size:14px; font-family:ui-monospace,Menlo,monospace}
+  .street .sname{color:var(--dim); width:42px; flex-shrink:0; font-size:12px; padding-top:1px; text-transform:uppercase}
+  .street .board{font-weight:700}
+  .item .notes{font-size:13.5px; color:var(--dim); padding:4px 0}
+  .item code{display:block; background:var(--card2); border:1px solid var(--line); border-radius:8px;
+    padding:8px; font-size:12px; word-break:break-all; font-family:ui-monospace,Menlo,monospace; margin-top:6px; color:var(--dim)}
+  .item .acts{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap}
+  .item .acts button{flex:1; min-width:60px; padding:9px 0; border-radius:8px; border:1px solid var(--line);
+    background:var(--card2); color:var(--text); font-size:13px}
+  .linkpick{display:flex; flex-direction:column; gap:6px; margin-top:8px}
+  .linkpick button{padding:9px 10px; border-radius:8px; border:1px solid var(--line);
+    background:var(--card2); color:var(--text); font-size:13px; text-align:left}
+  .linkpick button.cur{border-color:var(--gold); color:var(--gold)}
+  .stats{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px}
+  .chip{background:var(--card2); border:1px solid var(--line); border-radius:99px; padding:5px 11px; font-size:12.5px; color:var(--dim)}
+  .chip b{color:var(--text)}
+  /* The bar spans the screen (so the blur and border reach the edges) while the buttons stay
+     within the same column as the content — padding does that without extra markup. */
+  nav{position:fixed; bottom:0; left:0; right:0; display:flex; background:rgba(15,17,21,.96);
+    border-top:1px solid var(--line); backdrop-filter:blur(10px); z-index:20;
+    padding-bottom:env(safe-area-inset-bottom);
+    padding-left:max(0px, calc((100% - var(--maxw)) / 2));
+    padding-right:max(0px, calc((100% - var(--maxw)) / 2))}
+  nav button{flex:1; padding:10px 0 8px; background:none; border:0; color:var(--dim); font-size:11px; letter-spacing:.06em}
+  nav button .ic{display:block; font-size:19px; line-height:1.2}
+  nav button.on{color:var(--gold)}
+  #sheet{position:fixed; left:0; right:0; bottom:0; background:var(--card); border-top:1px solid var(--line);
+    border-radius:18px 18px 0 0; padding:12px 14px calc(14px + env(safe-area-inset-bottom)); z-index:30;
+    box-shadow:0 -12px 40px rgba(0,0,0,.5)}
+  #sheet h4{margin:0 0 8px; font-size:13px; color:var(--dim); font-weight:600; display:flex; align-items:center}
+  #boardPrev{display:flex; gap:6px; align-items:center; margin-left:auto; font-size:18px; font-weight:700}
+  #boardPrev button{background:none; border:1px solid var(--line); border-radius:8px; color:var(--dim); padding:3px 9px; font-size:15px}
+  #sheet .ranks{display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:10px}
+  #sheet .ranks button,#sheet .suits button{padding:12px 0; border-radius:10px; border:1px solid var(--line);
+    background:var(--card2); color:var(--text); font-size:17px; font-weight:800}
+  #sheet .ranks button.on{border-color:var(--gold); color:var(--gold)}
+  #sheet .suits{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
+  #sheet .suits button{font-size:24px}
+  #sheetDone{margin-top:10px}
+  #toast{position:fixed; left:50%; transform:translateX(-50%); bottom:92px; background:#000; color:#fff;
+    padding:9px 16px; border-radius:99px; font-size:13.5px; z-index:50; opacity:.95; border:1px solid var(--line)}
+  input[type=file]{width:100%; font-size:16px; color:var(--dim)}
+  /* ---- first run ---- */
+  #intro{position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; flex-direction:column;
+    padding:calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom))}
+  #intro .introtop{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch}
+  #intro h2{font-size:25px; line-height:1.2; margin:0 0 12px}
+  #intro p{color:var(--dim); font-size:16px; line-height:1.5; margin:0 0 14px}
+  #intro b{color:var(--text)}
+  #intro .introex{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin:0 0 14px}
+  #intro .introex code{display:block; font-size:15px; color:var(--gold); word-break:break-word; line-height:1.6}
+  #intro .introex .arrow{color:var(--dim); font-size:12px; margin:8px 0 4px; letter-spacing:.08em; text-transform:uppercase}
+  #intro .introex .plain{color:var(--text); font-size:14.5px; line-height:1.5}
+  #intro .dots{display:flex; gap:7px; justify-content:center; padding:14px 0 4px}
+  #intro .dots i{width:7px; height:7px; border-radius:99px; background:var(--line); display:block}
+  #intro .dots i.on{background:var(--gold)}
+  #intro .navrow{display:flex; gap:10px; align-items:center}
+  #intro .navrow .btn{flex:1; min-height:52px}
+  #intro .skip{background:none; border:0; color:var(--dim); font-size:15px; padding:14px 10px; min-height:44px}
+  .emptycta{margin-top:10px}
+  .big{display:flex; align-items:center; gap:13px; width:100%; text-align:left;
+    background:var(--card2); border:1px solid var(--line); border-radius:14px; padding:15px;
+    margin-bottom:10px; color:var(--text); font-size:15.5px; min-height:44px}
+  .big .ic{font-size:20px; color:var(--gold); width:24px; text-align:center; flex:none}
+  .big b{display:block; font-size:15.5px; font-weight:600}
+  .big i{display:block; color:var(--dim); font-size:13px; font-style:normal; margin-top:2px}
+  .big .ch{margin-left:auto; color:var(--dim); flex:none}
+  .linkish{background:none;border:0;color:var(--gold);font-size:inherit;padding:0;text-decoration:underline}
+  .emptycta button{background:var(--card2); color:var(--text); border:1px solid var(--line);
+    border-radius:10px; padding:12px 14px; font-size:15px; min-height:44px}
+  /* ---- study: your own hands in the rotation ---- */
+  .tag{display:inline-block; font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--gold); border:1px solid var(--gold); border-radius:99px; padding:3px 9px; opacity:.9}
+  .mixbars{margin:11px 0 4px}
+  .mixrow{display:flex; align-items:center; gap:9px; margin-bottom:7px}
+  .mixrow .nm{flex:0 0 33%; font-size:13px; color:var(--dim); text-align:left}
+  .mixrow .br{flex:1; height:9px; background:var(--card2); border-radius:99px; overflow:hidden}
+  .mixrow .br i{display:block; height:9px; border-radius:99px; background:var(--dim)}
+  .mixrow .pc{flex:0 0 40px; text-align:right; font-size:13px; font-variant-numeric:tabular-nums; color:var(--dim)}
+  .mixrow.mine .nm,.mixrow.mine .pc{color:var(--gold); font-weight:600}
+  .mixrow.mine .br i{background:var(--gold)}
+  .mixnote{color:var(--dim); font-size:11.5px; line-height:1.45; margin-top:8px; text-align:left}
+  .minepos{font-size:13px; color:var(--dim); margin-bottom:8px}
+  .streets{background:var(--card2); border:1px solid var(--line); border-radius:10px;
+    padding:2px 12px; margin-top:12px; text-align:left}
+  .street{display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:13.5px}
+  .street:last-child{border-bottom:0}
+  .street .st{flex:0 0 54px; color:var(--dim); font-size:10.5px; letter-spacing:.09em;
+    text-transform:uppercase; padding-top:3px}
+  .street .ln{flex:1; line-height:1.5}
+  #drillHand .board{display:flex; gap:5px; justify-content:center; margin-top:5px}
+  .minerow{display:flex; gap:8px; margin-top:12px}
+  .minibtn{flex:1; min-height:44px; background:var(--card2); color:var(--text);
+    border:1px solid var(--line); border-radius:10px; font-size:14px}
+  /* ---- header gear ---- */
+  .gear{background:none; border:0; color:var(--dim); font-size:19px; line-height:1;
+    padding:8px; margin:-8px -8px -8px 6px; min-width:44px; min-height:44px}
+  /* ---- progress ---- */
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin-bottom:10px}
+  .tile{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:11px 12px;
+    width:100%; text-align:left; color:var(--text); font:inherit; min-height:44px}
+  .tile:active{background:var(--card2)}
+  .tile .k{color:var(--dim); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase}
+  .tile .v{font-size:21px; font-weight:600; margin-top:3px}
+  .tile .s{color:var(--dim); font-size:12px; margin-top:2px}
+  .curve{width:100%; height:150px; display:block; overflow:visible}
+  .curve .grid{stroke:var(--line); stroke-width:1}
+  .curve .zero{stroke:var(--dim); stroke-width:1; stroke-dasharray:3 3; opacity:.6}
+  .split{display:flex; align-items:center; gap:9px; padding:8px 0; border-bottom:1px solid var(--line)}
+  .split:last-child{border-bottom:0}
+  .split .nm{flex:0 0 33%; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .split .bar{flex:1; height:8px; background:var(--card2); border-radius:99px; position:relative; overflow:hidden}
+  .split .bar i{position:absolute; top:0; bottom:0; border-radius:99px; display:block}
+  .split .amt{flex:0 0 auto; font-size:13.5px; font-variant-numeric:tabular-nums; text-align:right; min-width:70px}
+  .split .sub{color:var(--dim); font-size:11.5px}
+  .prognote{color:var(--dim); font-size:13px; line-height:1.5}
+  /* ---- study: reference pages ---- */
+  .refrow{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+  .refrow a{display:flex; flex-direction:column; justify-content:center; gap:3px; text-decoration:none;
+    background:var(--card2); border:1px solid var(--line); border-radius:12px; padding:14px; min-height:64px}
+  .refrow a b{color:var(--text); font-size:15.5px}
+  .refrow a span{color:var(--dim); font-size:12.5px}
+  h3{font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin:4px 0 8px}
+  /* ---- study: drill ---- */
+  #drillSpot{font-size:14.5px; text-align:center; min-height:20px}
+  #drillSpot .rep{color:var(--gold); font-size:12px}
+  #drillHand{display:flex; flex-direction:column; align-items:center; gap:6px; margin:16px 0 4px}
+  #drillHand .pc{display:inline-flex; align-items:center; gap:1px; font-size:clamp(27px, 8.5vw, 36px); font-weight:800;
+    background:var(--card2); border:1px solid var(--line); border-radius:12px; padding:7px 12px}
+  #drillHand .hole,#drillHand .board{display:flex; gap:8px; justify-content:center}
+  #drillHand .board .pc{font-size:26px; padding:5px 9px}
+  #drillHand .bdlab{font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); margin-top:4px}
+  #drillHand .drawbadge{font-size:16px; font-weight:700; color:var(--gold); background:rgba(224,169,62,.1);
+    border:1px solid var(--line); border-radius:10px; padding:12px 16px; text-align:center}
+  #drillQ{text-align:center; color:var(--dim); font-size:13px; margin-bottom:14px}
+  #drillBtns{display:flex; gap:10px}
+  #drillBtns .act{flex:1; padding:18px 0; border-radius:12px; border:1px solid var(--line); font-size:17px; font-weight:800;
+    background:var(--card2); color:var(--text)}
+  #drillBtns.three .act{font-size:15px; padding:15px 0}
+  #drillBtns .act.fold{background:var(--card2); color:var(--text)}
+  #drillBtns .act.go{background:var(--gold); color:#14161b; border-color:var(--gold)}
+  #drillBtns .act.call{background:var(--green); color:#0c1410; border-color:transparent}
+  #drillBtns .act.raise{background:var(--gold); color:#14161b; border-color:var(--gold)}
+  #drillBtns .act.threebet{background:#e0703e; color:#1a0d06; border-color:transparent}
+  #drillBtns .act.jam{background:var(--red); color:#220e0e; border-color:transparent}
+  #drillHand .drawname{font-size:14px; font-weight:700; color:var(--gold); margin-top:8px; text-align:center}
+  #drillHand .drawname.dim{color:var(--dim)}
+  .minitog{background:var(--card2); border:1px solid var(--line); color:var(--dim); border-radius:9px;
+    padding:0 12px; height:40px; font-size:13px; margin:0}
+  .optbtn{width:100%; display:flex; align-items:center; gap:6px; min-height:44px; padding:0 12px;
+    background:none; border:1px solid var(--line); border-radius:10px; color:var(--dim); font-size:13.5px}
+  .optbtn.on{border-color:var(--gold); color:var(--gold)}
+  .optbtn .chev{margin-left:auto; font-size:11px}
+  .optpanel{margin-top:8px; padding:10px; background:var(--card); border:1px solid var(--line); border-radius:12px}
+  .optpanel .styletog{display:flex; flex-wrap:wrap; gap:7px; margin-bottom:8px}
+  .optpanel .styletog:last-child{margin-bottom:0}
+  .sel.modes{margin-bottom:8px; gap:6px; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch}
+  .sel.modes button{flex:1 0 auto; min-height:44px; white-space:nowrap; padding:0 12px}
+  .libitem{display:block; text-decoration:none; background:var(--card2); border:1px solid var(--line);
+    border-radius:12px; padding:14px; margin-top:10px}
+  .libitem b{display:block; color:var(--text); font-size:16px; margin-bottom:5px}
+  .libitem span{display:block; color:var(--dim); font-size:13.5px; line-height:1.5}
+  .libitem em{display:block; color:var(--gold); font-style:normal; font-size:13.5px; margin-top:9px}
+  .minitog:active{background:var(--card2)}
+  .minitog.on{border-color:var(--gold); color:var(--gold); background:rgba(224,169,62,.12)}
+  .styletog{display:inline-flex; gap:4px; margin-left:auto}
+  .prevline{display:block; background:var(--card2); border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; font-size:12.5px; font-family:ui-monospace,Menlo,monospace; color:var(--gold);
+    word-break:break-all; min-height:18px}
+  #prevStreets{margin-top:4px; min-height:16px}
+  #fmtSheet{margin-top:8px; border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--card2)}
+  .toks button.posk{color:var(--dim); font-size:12px}
+  .fbhead{text-align:center; font-size:17px; font-weight:800; padding:6px 0}
+  .fbhead.good{color:var(--green)} .fbhead.bad{color:var(--red)} .fbhead.mix{color:var(--gold)}
+  .fbwhy{text-align:center; font-size:13.5px; color:var(--text); margin-bottom:12px}
+  .fbwhy .dim{color:var(--dim)}
+  .fbwhy .fbtree{margin-top:9px; padding-top:8px; border-top:1px solid var(--line); text-align:left; font-size:12.5px; line-height:1.5}
+  .fbwhy .fbtree .tw{color:var(--gold); font-weight:700; white-space:nowrap}
+  #drillHand .tsep{align-self:center; color:var(--dim); font-size:13px; margin:0 2px}
+  .next{margin-top:2px}
+  .reset{display:block; margin:10px auto 0; background:none; border:0; color:var(--dim); font-size:12px; text-decoration:underline}
+  /* ---- study: pocket card ---- */
+  .sel{display:flex; gap:5px; margin-bottom:7px; flex-wrap:wrap; align-items:center}
+  .sel button{flex:1; min-width:42px; padding:9px 0; border-radius:9px; border:1px solid var(--line);
+    background:var(--card2); color:var(--dim); font-size:13px; font-weight:700}
+  .sel button.on{border-color:var(--gold); color:var(--gold); background:rgba(224,169,62,.12)}
+  .sel.sub .sl{flex:0 0 auto; color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.06em; padding-right:2px}
+  .grid13{display:grid; grid-template-columns:repeat(13,1fr); gap:2px; margin:10px 0 6px}
+  .g13{aspect-ratio:1; display:flex; align-items:center; justify-content:center; font-size:7.5px; font-weight:700;
+    letter-spacing:-.3px; border-radius:3px; background:var(--card2); color:#5b6473; border:1px solid transparent}
+  .g13.in{background:var(--gold); color:#14161b}
+  .g13.tb{background:#e0703e; color:#1a0d06}
+  .g13.cl{background:var(--green); color:#0c1410}
+  .lg{display:flex; align-items:center; gap:5px; flex-wrap:wrap; font-size:12px; color:var(--text); margin-bottom:4px}
+  .lg .k{width:13px; height:13px; border-radius:3px; background:var(--card2); display:inline-block; margin-left:8px}
+  .lg .k.in{background:var(--gold)} .lg .k.tb{background:#e0703e} .lg .k.cl{background:var(--green)}
+  .lg .dim{margin-left:4px}
+  table.ref{width:100%; border-collapse:collapse; font-size:13.5px}
+  table.ref th{text-align:left; color:var(--dim); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.06em; padding:3px 4px}
+  table.ref td{padding:4px; border-top:1px solid var(--line)}
+  table.ref td.r,table.ref th.r{text-align:right; font-variant-numeric:tabular-nums}
+  ul.reads{margin:4px 0 0; padding-left:18px}
+  ul.reads li{font-size:13.5px; margin-bottom:7px; line-height:1.4}
+  details.ref-d{border-top:1px solid var(--line); padding:8px 0}
+  details.ref-d summary{font-size:13.5px; font-weight:700; color:var(--text); cursor:pointer; list-style:none; padding:2px 0}
+  details.ref-d summary::-webkit-details-marker{display:none}
+  details.ref-d summary::before{content:'▸ '; color:var(--gold)}
+  details.ref-d[open] summary::before{content:'▾ '}
+  details.ref-d[open] summary{margin-bottom:8px}
+  [hidden]{display:none !important}
+  .sesscard{text-align:center; padding:4px 0}
+  .sessline{display:flex; align-items:center; justify-content:center; gap:8px; font-size:16px}
+  .sessline .live{color:var(--green); animation:pulse 2s infinite}
+  .sessline .dim{color:var(--dim); font-size:14px}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .sesstime{font-size:clamp(27px, 8.5vw, 36px); font-weight:600; font-variant-numeric:tabular-nums; margin:6px 0 2px; letter-spacing:-.01em}
+  .sessmeta{color:var(--dim); font-size:13px; margin-bottom:12px}
+  .sesscard .btn{width:100%}
+  .pushhd{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+  .pushhd span{font-size:13px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim)}
+  .pushhd .back{background:none;border:0;color:var(--gold);font-size:15px;padding:10px 12px 10px 0;min-height:44px}
+  #liveBar{display:flex;align-items:center;gap:9px;margin:0 0 12px;padding:11px 13px;
+    background:rgba(62,201,126,.09);border:1px solid rgba(62,201,126,.42);border-radius:11px;font-size:14px}
+  #liveBar .dot{color:var(--green);font-size:11px;animation:pulse 2s infinite}
+  #liveBar .cl{font-weight:600;font-variant-numeric:tabular-nums}
+  #liveBar .ch{margin-left:auto;color:var(--dim)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  #sessSetup{margin-bottom:18px}
+  #sessRow{margin-top:4px}
+  .homecard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:11px;text-align:center}
+  .homecard.live{border-color:var(--green)}
+  .homecard .clock{font-size:clamp(34px, 11vw, 46px);font-weight:600;letter-spacing:-.02em;margin:8px 0 2px;font-variant-numeric:tabular-nums}
+  /* iOS keyboard. Capacitor resizes the webview when it appears, so a position:fixed bottom
+     bar lands at the RESIZED viewport's bottom — i.e. floating mid-screen, which is exactly
+     what the device test found. Hide it while typing: you are not navigating mid-hand, and
+     the space it frees is what makes the live preview visible while you thumb-type. */
+  body.typing nav{display:none}
+  body.typing{padding-bottom:16px}
+  #ask{position:fixed; inset:0; z-index:120; background:rgba(0,0,0,.6);
+    display:flex; align-items:center; justify-content:center; padding:20px}
+  .askbox{background:var(--card); border:1px solid var(--line); border-radius:16px;
+    padding:18px; width:100%; max-width:340px}
+  .askbox #askTitle{font-size:17px; font-weight:600; margin-bottom:6px}
+  .askbox .mini{margin:0 0 14px}
+  .askbox .btn.danger{background:var(--red); color:#fff}
+  .gap{height:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>♠</span> POKER LOG</h1>
+  <span class="hstat"><span id="count"></span><button id="navData" class="gear" aria-label="Data and settings">⚙</button></span>
+</header>
+<main>
+<div id="liveBar" hidden></div>
+
+<!-- ===================== HOME ===================== -->
+<section id="tab-home">
+  <div class="panel" id="homeRestored" hidden></div>
+  <div id="homeSession"></div>
+  <div class="tiles" id="homeTiles"></div>
+  <div id="homeRoutes"></div>
+</section>
+
+<!-- ===================== LOG (capture) ===================== -->
+<section id="tab-log" hidden>
+  <div id="savedCard" hidden></div>
+  <div id="editBar" hidden>Editing hand <button id="cancelEdit">cancel</button></div>
+  <!-- The session is the frame the night hangs on; the hand form is the thing you use
+       fifteen times inside it. Two cards, in that order, so the screen reads as two jobs
+       instead of one wall of controls. -->
+  <div class="panel" id="sessPanel">
+    <div id="sessSetup">
+      <div class="row">
+        <div style="flex:0 0 34%"><label class="lab" style="margin-top:0">Game</label>
+          <div class="seg" id="segGame">
+            <button data-v="cash" class="on">Cash</button><button data-v="mtt">MTT</button>
+          </div></div>
+        <div style="flex:1"><label class="lab" id="stakesLab" style="margin-top:0">Stakes</label>
+          <input type="text" id="stakes" placeholder="1/3" autocapitalize="off" autocomplete="off"></div>
+        <div style="flex:1"><label class="lab" style="margin-top:0">Venue</label>
+          <input type="text" id="venue" placeholder="venue" autocapitalize="words" autocomplete="off"></div>
+      </div>
+    </div>
+    <div id="sessRow"></div>
+  </div>
+
+  <div class="panel">
+    <label class="lab" style="margin-top:0">Position</label>
+    <div class="grid8" id="posGrid"></div>
+
+    <div class="row" style="margin-top:10px">
+      <div style="flex:2">
+        <label class="lab" style="margin-top:0">Hole cards</label>
+        <div class="slots">
+          <button class="slot" id="slot0">+</button>
+          <button class="slot" id="slot1">+</button>
+        </div>
+      </div>
+      <div style="flex:1">
+        <label class="lab" style="margin-top:0" id="effLab">Eff <span class="curSym">$</span></label>
+        <input type="text" id="eff" inputmode="decimal" placeholder="300" autocomplete="off" style="height:62px; font-size:20px; text-align:center">
+      </div>
+    </div>
+
+    <label class="lab">Action <span class="hint">— taps below, or type anything</span></label>
+    <div class="toks" id="tokStrip"></div>
+    <textarea id="action" placeholder="open15 btn3b45 c / (Ks7d2c) x b25 c / (4h) x b60 f"
+      autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false"></textarea>
+
+    <label class="lab">Result &amp; note</label>
+    <div class="row">
+      <div class="seg wl" id="segWL" style="flex:0 0 32%">
+        <button data-v="+">Won</button><button data-v="-">Lost</button>
+      </div>
+      <input type="text" id="amount" inputmode="decimal" placeholder="amount" autocomplete="off">
+      <button class="flagbtn" id="flagBtn">⚑ review</button>
+    </div>
+    <div class="gap"></div>
+    <input type="text" id="note" placeholder="villain read / context (optional)" autocapitalize="off" autocomplete="off">
+    <label class="lab">Saved as <button id="fmtHelp" class="minitog">? notation</button></label>
+    <code id="livePrev" class="prevline">—</code>
+    <div id="prevStreets" class="mini"></div>
+    <div id="fmtSheet" hidden>
+      <table class="ref">
+        <tr><th>token</th><th>means</th><th>token</th><th>means</th></tr>
+        <tr><td><b>x</b></td><td>check</td><td><b>b25</b></td><td>bet 25</td></tr>
+        <tr><td><b>c</b></td><td>call</td><td><b>r60</b></td><td>raise <i>to</i> 60</td></tr>
+        <tr><td><b>f</b></td><td>fold</td><td><b>3b45</b></td><td>3-bet to 45</td></tr>
+        <tr><td><b>jam</b></td><td>all-in</td><td><b>/</b></td><td>next street</td></tr>
+        <tr><td><b>(Ks7d2c)</b></td><td colspan="3">board cards open a street</td></tr>
+      </table>
+      <p class="mini" style="margin:8px 0 0">Actions in the order they happened — order says who did what. Prefix a villain’s action with their seat only when it’s unclear: <b>btn3b45</b>, <b>sb c</b>. Skip boring streets. A lazy line like <b>KK &lt; AA, std | -250</b> is always legal.</p>
+    </div>
+    <div class="gap"></div>
+    <button class="btn" id="saveHand">Save hand</button>
+  </div>
+
+<div class="panel" id="resultPanel" hidden>
+    <div id="endBanner" hidden></div>
+    <div class="seg" id="segLog">
+      <button data-v="t" class="on">Tournament</button><button data-v="s">Cash session</button>
+    </div>
+
+    <div id="formT">
+      <div class="row"><div>
+        <label class="lab">Date</label><input type="date" id="tDate">
+      </div><div>
+        <label class="lab">Venue</label><input type="text" id="tVenue" placeholder="venue" autocomplete="off">
+      </div></div>
+      <label class="lab">Event</label>
+      <input type="text" id="tEvent" placeholder="e.g. $150 NLH bounty" autocomplete="off">
+      <div class="row"><div>
+        <label class="lab">Buy-in <span class="curSym">$</span></label><input type="text" id="tBuyin" inputmode="decimal" placeholder="150">
+      </div><div>
+        <label class="lab">Bullets</label><input type="text" id="tEntries" inputmode="numeric" value="1">
+      </div><div>
+        <label class="lab">Field</label><input type="text" id="tField" inputmode="numeric" placeholder="180">
+      </div></div>
+      <div class="row"><div>
+        <label class="lab">Finish</label><input type="text" id="tPlace" inputmode="numeric" placeholder="14">
+      </div><div>
+        <label class="lab">Cashed <span class="curSym">$</span></label><input type="text" id="tCash" inputmode="decimal" placeholder="0">
+      </div><div>
+        <label class="lab">Bounties <span class="curSym">$</span></label><input type="text" id="tBounty" inputmode="decimal" placeholder="0">
+      </div></div>
+      <label class="lab">Notes</label>
+      <input type="text" id="tNotes" placeholder="key hands, structure, mood (optional)" autocomplete="off">
+      <div class="gap"></div>
+      <button class="btn" id="saveT">Save tournament</button>
+    </div>
+
+    <div id="formS" hidden>
+      <div class="row"><div>
+        <label class="lab">Date</label><input type="date" id="sDate">
+      </div><div>
+        <label class="lab">Venue</label><input type="text" id="sVenue" placeholder="venue" autocomplete="off">
+      </div></div>
+      <div class="row"><div>
+        <label class="lab">Stakes</label><input type="text" id="sStakes" placeholder="1/3" autocapitalize="off">
+      </div><div>
+        <label class="lab">Hours</label><input type="text" id="sHours" inputmode="decimal" placeholder="5.5">
+      </div></div>
+      <div class="row"><div>
+        <label class="lab">Total buy-in <span class="curSym">$</span></label><input type="text" id="sBuyin" inputmode="decimal" placeholder="300">
+      </div><div>
+        <label class="lab">Cash-out <span class="curSym">$</span></label><input type="text" id="sCashout" inputmode="decimal" placeholder="610">
+      </div></div>
+      <label class="lab">Notes</label>
+      <input type="text" id="sNotes" placeholder="(optional)" autocomplete="off">
+      <div class="gap"></div>
+      <button class="btn" id="saveS">Save session</button>
+    </div>
+  </div>
+  </div>
+</section>
+
+<!-- ===================== HISTORY ===================== -->
+<section id="tab-history" hidden>
+  <div class="pushhd"><button class="back" id="histBack">‹ Progress</button><span>History</span><span></span></div>
+  <input type="text" id="histSearch" placeholder="Search cards, position, notes…" autocapitalize="off" autocomplete="off" style="margin-bottom:10px">
+  <div class="seg" id="segHist" style="margin-bottom:12px">
+    <button data-v="hands" class="on">Hands</button><button data-v="results">Results</button>
+  </div>
+  <div id="histHands">
+  <div class="panel">
+    <div class="filters">
+      <button id="filtAll" class="on">All</button>
+      <button id="filtFlag">⚑ Flagged</button>
+      <button id="filtReview">⚐ Review</button>
+      <button id="filtAcr">ACR</button>
+      <button id="filtMine">Manual</button>
+      <button id="filtRaw">Non-Hold'em</button>
+    </div>
+    <div id="handList"></div>
+  </div>
+  </div>
+
+  <div id="histResults" hidden>
+  <div class="panel">
+    <h3>Results</h3>
+    <div class="stats" id="logStats"></div>
+    <div class="list" id="logList"></div>
+    <div class="gap"></div>
+    <button class="btn ghost" id="addResult">＋ Add a result</button>
+  </div>
+  </div>
+</section>
+
+<!-- ===================== STUDY ===================== -->
+<section id="tab-study" hidden>
+  <div class="seg" id="segStudy" style="margin-bottom:12px">
+    <button data-v="drill" class="on">Drill</button><button data-v="card">Cards</button><button data-v="lib">Library</button>
+  </div>
+  <div id="studyDrill">
+    <div class="sel modes" id="drillMode"></div>
+    <div id="drillOptsBtn"></div>
+    <div class="optpanel" id="drillOpts" hidden></div>
+    <div class="panel">
+      <div id="drillSpot"></div>
+      <div id="drillHand"></div>
+      <div id="drillQ"></div>
+      <div id="drillBtns"></div>
+      <div id="drillFb" hidden></div>
+    </div>
+    <div class="panel" id="drillStats"></div>
+  </div>
+  <div id="studyCard" hidden>
+    <div class="panel">
+      <div id="cardSel"></div>
+      <div id="cardGrid"></div>
+      <div id="cardMeta" class="mini"></div>
+    </div>
+    <div class="panel" id="cardRef"></div>
+  </div>
+  <div class="panel" id="studyLeaks" hidden></div>
+  <div id="studyLib" hidden>
+    <div class="panel">
+      <h3>Library</h3>
+      <p class="mini" style="margin-top:0">Written guides you can read away from the table. They stay on the phone and work offline like everything else.</p>
+      <a class="libitem" href="playbook.html">
+        <b>Postflop Aggression Playbook</b>
+        <span>One leak mapped end to end — when to bet bigger for value, when a bluff needs backup, and why improving your hand is the worst time to slow down. Street by street, with a cheat card at the end.</span>
+        <em>Read →</em>
+      </a>
+      <a class="libitem" href="horse.html">
+        <b>HORSE Cheat Sheet</b>
+        <span>The five rotating limit games in one page: starting hands, the traps in each, and what changes when you can't punt a stack. For mixed-game nights.</span>
+        <em>Read →</em>
+      </a>
+    </div>
+    <div class="panel">
+      <h3>Concepts</h3>
+      <p class="mini" style="margin-top:0">Longer reads. Anything you would study away from the table lives here; Cards keeps only what you want in front of you mid-hand.</p>
+      <div id="libArticles"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PROGRESS ===================== -->
+<section id="tab-progress" hidden>
+  <div class="seg" id="segProg" style="margin-bottom:12px">
+    <button data-v="all" class="on">Overall</button><button data-v="cash">Cash</button><button data-v="mtt">Tournaments</button>
+  </div>
+  <div id="progMoney"></div>
+</section>
+
+<!-- ===================== HAND DETAIL (pushed from History) ===================== -->
+<section id="tab-hand" hidden>
+  <div class="pushhd"><button class="back" id="handBack">‹ History</button><span>Hand</span><span></span></div>
+  <div id="handDetail"></div>
+</section>
+
+<!-- ===================== YOUR GAME (pushed from Progress) ===================== -->
+<section id="tab-game" hidden>
+  <div class="pushhd"><button class="back" id="gameBack">‹ Progress</button><span>Your game</span><span></span></div>
+  <div id="progGame"></div>
+</section>
+
+<!-- ===================== SETTINGS ===================== -->
+<section id="tab-data" hidden>
+  <div class="pushhd"><button class="back" id="dataBack">‹ Back</button><span>Settings</span><span></span></div>
+  <div class="panel">
+    <h3>Your data</h3>
+    <p class="mini" id="dataStatus">checking…</p>
+  </div>
+  <div class="panel">
+    <h3>Backup</h3>
+    <p class="mini">A backup file holds every hand, tournament, session and drill answer. Keep one somewhere safe — it is the only copy that survives deleting the app.</p>
+    <button class="btn ghost" id="expJson">Save backup file</button><div class="gap"></div>
+    <label class="lab">Restore from a backup file</label>
+    <input type="file" id="importFile" accept="application/json,.json"><div class="gap"></div>
+    <label class="lab">…or paste backup text</label>
+    <textarea id="restoreBox" placeholder="paste backup JSON here" autocapitalize="off" spellcheck="false"></textarea>
+    <div class="gap"></div>
+    <button class="btn ghost" id="restoreBtn">Restore (overwrites)</button>
+  </div>
+  <div class="panel">
+    <h3>Currency</h3>
+    <div class="seg" id="segCur">
+      <button data-v="$" class="on">$</button><button data-v="€">€</button><button data-v="£">£</button><button data-v="¥">¥</button>
+    </div>
+    <p class="mini">Display only — amounts are never converted.</p>
+  </div>
+  <div class="panel">
+    <h3>Getting started</h3>
+    <button class="btn ghost" id="introAgain">Show the intro again</button><div class="gap"></div>
+    <button class="btn ghost" id="sampleBtn">Add sample data</button>
+    <p class="mini" style="margin-bottom:0">Sample hands let you see what the app looks like with a few sessions in it. Removing them never touches anything you logged yourself.</p>
+  </div>
+  <div class="panel">
+    <button class="btn danger" id="clearAll">Erase all data</button>
+  </div>
+
+  <div class="panel">
+    <h3>About</h3>
+    <p class="mini" style="margin-top:0"><b>Poker Log</b> <span id="appVersion"></span></p>
+    <p class="prognote">Log the hands that mattered in seconds, then drill the spots you got wrong. It works entirely on this device — there is no account, no server and no analytics, and nothing you log is ever uploaded anywhere.</p>
+    <p class="prognote"><b>What the drill answers are.</b> Preflop push/fold comes from an approximate-Nash solve; postflop is a heuristic engine calibrated by simulation. Both are checked against brute-force equity, and spots near a decision boundary are shown as a mix rather than a right answer. It is a strong practice tool, not a full postflop solver — when a spot really matters, verify it in one.</p>
+    <div id="proRow" hidden>
+      <button class="btn ghost" id="restorePurchase">Restore purchases</button>
+      <div class="gap"></div>
+    </div>
+    <button class="btn ghost" id="showCredits">Acknowledgements</button>
+    <div id="credits" hidden>
+      <p class="mini" style="margin-bottom:0">Real Hands and Real Spots are derived from the Poker Hand History (PHH) dataset, © 2024–2025 Universal, Open, Free, and Transparent Computer Poker Research Group, used under the MIT License.</p>
+      <p class="mini">Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: the above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.</p>
+      <p class="mini" style="margin-bottom:0">THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</p>
+      <p class="mini" style="margin-bottom:0">Those hands are anonymised online hand histories from 2009, not hands played by anyone using this app.</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<nav>
+  <button id="navHome" class="on"><span class="ic">⌂</span>Home</button>
+  <button id="navLog"><span class="ic">＋</span>Log</button>
+  <button id="navStudy"><span class="ic">♣</span>Study</button>
+  <button id="navProgress"><span class="ic">◗</span>Progress</button>
+</nav>
+
+<div id="intro" hidden>
+  <div class="introtop" id="introBody"></div>
+  <div class="dots" id="introDots"></div>
+  <div class="navrow">
+    <button class="skip" id="introSkip">Skip</button>
+    <button class="btn" id="introNext">Next</button>
+  </div>
+</div>
+
+<div id="ask" hidden>
+  <div class="askbox">
+    <div id="askTitle"></div>
+    <p id="askBody" class="mini"></p>
+    <div class="row">
+      <button class="btn ghost" id="askNo" style="flex:1">Cancel</button>
+      <button class="btn" id="askYes" style="flex:1">OK</button>
+    </div>
+  </div>
+</div>
+
+<div id="sheet" hidden>
+  <h4><span id="sheetTitle">Pick cards</span>
+    <span id="boardPrev" hidden><span id="boardCards"></span><button id="bsBoard">⌫</button></span>
+  </h4>
+  <div class="ranks" id="rankGrid"></div>
+  <div class="suits" id="suitGrid"></div>
+  <button class="btn ghost" id="sheetDone">Done</button>
+</div>
+<div id="toast" hidden></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SUITS = {s:'♠', h:'♥', d:'♦', c:'♣'};
+const RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
+const POSITIONS = ['UTG','UTG1','LJ','HJ','CO','BTN','SB','BB'];
+const LS = 'pokerlog.v1';
+
+// Bump when the stored shape changes, and add a migration below. Without this, v1 and v2
+// data are indistinguishable and the first shape change after launch has nowhere to stand.
+// study.js already versions its own stats; the main store should have from the start.
+const SCHEMA = 1;
+function fresh(){ return {v: SCHEMA, hands:[], tourneys:[], sessions:[], drills:[], deleted:[], activeSession:null, prefs:{game:'cash', stakes:'1/3', venue:'', onboarded:false, cur:'$'}}; }
+function migrate(d){
+  if (!d || typeof d !== 'object') return fresh();
+  if (d.v == null) d.v = SCHEMA;            // pre-versioning data is v1 by definition
+  return d;
+}
+// Deleting is now final and local — no server holds tombstones. These are kept only so a
+// future merge-on-import can tell "deleted" from "never seen", and capped so the log of
+// deletions can't outgrow the data itself.
+function tombstone(id){
+  if (!db.deleted) db.deleted = [];
+  db.deleted.push({id: id, t: Date.now()});
+  if (db.deleted.length > 500) db.deleted.splice(0, db.deleted.length - 500);
+}
+let db;
+try { db = migrate(Object.assign(fresh(), JSON.parse(Store.get(LS) || '{}'))); }
+catch(e){ db = fresh(); }
+db.prefs = Object.assign(fresh().prefs, db.prefs || {});
+
+// This device is the only copy. persist() writes the working copy and mirrors it to
+// durable device storage; a false return means the write was refused (out of space),
+// which the user has to be told about — silently dropping a logged hand is the one
+// failure this app cannot have.
+let storageFailed = false;
+function persist(){
+  const ok = Store.set(LS, JSON.stringify(db));
+  if (!ok && !storageFailed){
+    storageFailed = true;
+    toast('Out of space — export a backup');
+  } else if (ok){ storageFailed = false; }
+  updateCount();
+}
+function save(){ persist(); }
+// Study reads the hand log through these two, so the drill engine can pull the player's own
+// flagged hands into the rotation without reaching into `db` directly.
+window.pokerDB = function(){ return db; };
+window.clearHandFlag = function(id){
+  const h = db.hands.find(x => x.id === id);
+  if (!h) return;
+  h.flag = false; h.reviewed = true; h.up = Date.now();
+  save(); renderHands(); renderProgress();
+};
+// Study drills call this to log every answer; it rides along in the backup file.
+window.recordDrill = function(entry){
+  if (!db.drills) db.drills = [];
+  db.drills.push(entry);
+  if (db.drills.length > 4000) db.drills.splice(0, db.drills.length - 4000);
+  persist();
+};
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function pad(n){ return String(n).padStart(2,'0'); }
+function todayISO(){ const d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
+function dateOf(ts){ const d = new Date(ts); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
+function timeOf(ts){ const d = new Date(ts); return d.getHours() + ':' + pad(d.getMinutes()); }
+function shortDate(iso){
+  const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const p = (iso || '').split('-');
+  return p.length === 3 ? m[+p[1]-1] + ' ' + (+p[2]) : iso;
+}
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+// net display: bb to 1 dp, $ to 2 dp; .toString() drops trailing zeros
+// (e.g. 82.29999999999995 → 82.3, 24.0 → 24). Fixes float drift from summing.
+function netStr(v, game){ const f = game === 'mtt' ? 10 : 100; return (Math.round(num(v) * f) / f).toString(); }
+let toastTimer;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 1700);
+}
+async function copyText(text, label){
+  if (!text) return toast('nothing to copy');
+  try { await navigator.clipboard.writeText(text); toast(label + ' copied'); }
+  catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast(label + ' copied'); }
+    catch(e2){ toast('copy failed'); }
+    ta.remove();
+  }
+}
+function cardHtml(c){
+  if (!c) return '';
+  return esc(c[0].toUpperCase()) + '<span class="suit-' + c[1].toLowerCase() + '">' + SUITS[c[1].toLowerCase()] + '</span>';
+}
+function colorCards(str){
+  return esc(str).replace(/([2-9TJQKAtjqka])([shdc])/g,
+    (m, r, s) => r.toUpperCase() + '<span class="suit-' + s + '">' + SUITS[s] + '</span>');
+}
+
+/* ---------- tabs ---------- */
+// Four destinations. Data is a settings screen reached from the header gear — it used to
+// hold a fifth nav slot, which is a lot of thumb real estate for a backup button.
+// Four destinations in the bar. History, Your game and Data are *pushed windows* — reached
+// from a parent, dismissed with back. Depth goes here rather than into more tabs, which is
+// how the Study tab got three rows of controls the first time around.
+const TABS = ['Home','Log','Study','Progress','History','Hand','Game','Data'];
+const NAVTABS = ['Home','Log','Study','Progress'];
+const PARENT = {History: 'Progress', Hand: 'Progress', Game: 'Progress', Data: null};
+function showTab(name){
+  TABS.forEach(t => { $('tab-' + t.toLowerCase()).hidden = (t !== name); });
+  const lit = PARENT[name] !== undefined ? PARENT[name] : name;   // a window lights its parent
+  NAVTABS.forEach(t => $('nav' + t).classList.toggle('on', t === lit));
+  if (name === 'Home') renderHome();
+  if (name === 'Log'){ renderSession(); renderLog(); }
+  if (name === 'History') renderHist();
+  if (name === 'Hand') renderHandDetail();
+  if (name === 'Game') renderGameProgress();
+  if (name === 'Data'){ refreshDataPanel(); renderAbout(); }
+  if (name === 'Study'){ renderLeaksCard(); if (window.StudyUI) window.StudyUI.render(); }
+  if (name === 'Progress') renderProgress();
+  renderLiveBar();
+  window.scrollTo(0,0);
+}
+NAVTABS.forEach(t => $('nav' + t).onclick = () => showTab(t));
+$('navData').onclick = () => showTab('Data');
+$('histBack').onclick = () => showTab('Progress');
+$('histSearch').oninput = () => renderHands();
+$('gameBack').onclick = () => showTab('Progress');
+$('handBack').onclick = () => showTab('History');
+// The reference pages are separate documents, so coming back from one re-enters the app at
+// its default tab — which dumped you on the hand form instead of where you left. A hash
+// says which tab to restore.
+function tabFromHash(){
+  const want = (location.hash || '').replace('#', '').toLowerCase();
+  return TABS.find(t => t.toLowerCase() === want) || null;
+}
+window.addEventListener('hashchange', () => { const t = tabFromHash(); if (t) showTab(t); });
+
+/* ---------- segmented controls ---------- */
+function seg(id, onChange){
+  const el = $(id);
+  el.querySelectorAll('button').forEach(b => b.onclick = () => {
+    el.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    if (onChange) onChange(b.dataset.v);
+  });
+  return {
+    get: () => { const b = el.querySelector('.on'); return b ? b.dataset.v : null; },
+    set: v => { el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === v)); }
+  };
+}
+
+/* ---------- new hand form ---------- */
+const segGame = seg('segGame', v => {
+  db.prefs.game = v; persist();
+  // A real label, not a mutating placeholder: WKWebView will not repaint placeholder text on
+  // an unfocused input, so the field silently kept the wrong hint on iOS.
+  $('stakesLab').textContent = v === 'mtt' ? 'Level / event' : 'Stakes';
+  $('effLab').innerHTML = v === 'mtt' ? 'Eff bb' : 'Eff <span class="curSym">' + esc(cur()) + '</span>';
+});
+const segWL = seg('segWL');
+segGame.set(db.prefs.game || 'cash');
+$('effLab').innerHTML = (db.prefs.game === 'mtt') ? 'Eff bb' : 'Eff <span class="curSym">' + esc(cur()) + '</span>';
+$('stakesLab').textContent = (db.prefs.game === 'mtt') ? 'Level / event' : 'Stakes';
+$('stakes').value = db.prefs.stakes || '';
+$('venue').value = db.prefs.venue || '';
+$('stakes').oninput = e => { db.prefs.stakes = e.target.value; persist(); };
+$('venue').oninput  = e => { db.prefs.venue  = e.target.value; persist(); };
+
+/* ---------- sessions: start once, hands auto-link, end fills the Log form ---------- */
+let endingSession = null;
+function renderSession(){
+  const s = db.activeSession, el = $('sessRow');
+  $('sessSetup').hidden = !!s;
+  if (!s){
+    el.innerHTML = '<button class="btn" id="sessStart">Start session</button>' +
+      '<p class="mini" style="margin:8px 0 0">Optional — it times the session and links every hand you log to it. You can log hands without one.</p>';
+    $('sessStart').onclick = () => {
+      if (!$('stakes').value.trim()) return toast('set stakes/event first');
+      // Never silently replace a running session — that destroys its elapsed time, which is
+      // the only record of how long the night was.
+      if (db.activeSession) return toast('a session is already running — end it first');
+      db.activeSession = { id: uid(), game: segGame.get(), stakes: $('stakes').value.trim(), venue: $('venue').value.trim(), startTs: Date.now() };
+      formSessionId = db.activeSession.id;
+      save(); renderSession(); toast('session started');
+    };
+    return;
+  }
+  const n = db.hands.filter(h => h.sessionId === s.id).length;
+  // Running session: the setup inputs go away entirely — stakes and venue are decided, and
+  // showing three locked, greyed-out fields is just noise on the screen you use most.
+  el.innerHTML = '<div class="sesscard">' +
+    '<div class="sessline"><span class="live">●</span><b>' + esc(s.stakes) + '</b>' +
+      (s.venue ? '<span class="dim">' + esc(s.venue) + '</span>' : '') + '</div>' +
+    '<div class="sesstime" id="sessClock">' + sessElapsed(s) + '</div>' +
+    '<div class="sessmeta">' + n + ' hand' + (n === 1 ? '' : 's') + ' logged this session</div>' +
+    '<button class="btn ghost" id="sessEnd">End session</button>' +
+    '<button class="linkish" id="sessDiscard" style="margin-top:12px">Started this by mistake?</button></div>';
+  $('sessEnd').onclick = endSession;
+  $('sessDiscard').onclick = discardSession;
+  startClock();
+}
+function sessElapsed(s){
+  const ms = Date.now() - s.startTs;
+  const h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60;
+  return h + 'h ' + pad(m) + 'm';
+}
+// A live clock is what makes the hourly rate on Progress honest without anyone typing hours.
+let clockTimer = null;
+function startClock(){
+  clearInterval(clockTimer);
+  clockTimer = setInterval(() => {
+    const s = db.activeSession;
+    if (!s) return clearInterval(clockTimer);
+    ['sessClock','homeClock','barClock'].forEach(id => {
+      const e = $(id); if (e) e.textContent = sessElapsed(s);
+    });
+  }, 30000);
+}
+// Throw away a session without recording a result. Hands logged during it are KEPT and
+// unlinked — never deleted — matching what deleting a results row does.
+function discardSession(){
+  const s = db.activeSession; if (!s) return;
+  const n = db.hands.filter(h => h.sessionId === s.id).length;
+  ask('Discard this session?',
+      n ? 'The ' + n + (n === 1 ? ' hand' : ' hands') + ' you logged during it are kept — they just stop being linked to a session. No result is recorded.'
+        : 'Nothing is recorded and the clock stops. You logged no hands during it.',
+      'Discard', true)
+    .then(yes => {
+      if (!yes) return;
+      db.hands.forEach(h => { if (h.sessionId === s.id){ h.sessionId = null; h.up = Date.now(); } });
+      db.activeSession = null;
+      endingSession = null;
+      $('resultPanel').hidden = true;
+      formSessionId = null;
+      save(); renderAll();
+      toast(n ? 'session discarded · ' + n + (n === 1 ? ' hand kept' : ' hands kept') : 'session discarded');
+    });
+}
+function endSession(){
+  const s = db.activeSession; if (!s) return;
+  endingSession = s;
+  db.activeSession = null; save(); renderSession();
+  const hrs = Math.round((Date.now() - s.startTs) / 360000) / 10;
+  segLog.set(s.game === 'mtt' ? 't' : 's');
+  $('formT').hidden = s.game !== 'mtt';
+  $('formS').hidden = s.game === 'mtt';
+  if (s.game === 'mtt'){
+    $('tDate').value = todayISO(); $('tVenue').value = s.venue; $('tEvent').value = s.stakes;
+  } else {
+    $('sDate').value = todayISO(); $('sVenue').value = s.venue; $('sStakes').value = s.stakes; $('sHours').value = hrs || '';
+  }
+  const n = db.hands.filter(h => h.sessionId === s.id).length;
+  $('endBanner').hidden = false;
+  $('endBanner').innerHTML = 'Finishing <b>' + esc(s.stakes) + (s.venue ? ' @ ' + esc(s.venue) : '') + '</b> (' + n + ' hands linked) — enter the results and save.';
+  $('resultPanel').hidden = false;
+  showTab('Log');
+  $('resultPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+
+let selPos = null, editingId = null;
+// The session this entry belongs to, pinned when the form opens. See saveHand.
+let formSessionId = null;
+POSITIONS.forEach(p => {
+  const b = document.createElement('button');
+  b.className = 'pos'; b.textContent = p; b.dataset.v = p.toLowerCase();
+  b.onclick = () => {
+    selPos = (selPos === b.dataset.v) ? null : b.dataset.v;
+    document.querySelectorAll('#posGrid .pos').forEach(x => x.classList.toggle('on', x.dataset.v === selPos));
+    tick();
+    hideSavedCard();
+    // fresh hand: flow straight into the card picker
+    if (selPos && !editingId && !cards[0] && !cards[1] && !$('action').value) openSheet('hand', 0);
+  };
+  $('posGrid').appendChild(b);
+});
+
+/* ---------- card picker sheet (hand + board modes) ---------- */
+let cards = [null, null], pickSlot = 0, pendingRank = null;
+let sheetMode = 'hand', boardBuf = [];
+function renderSlots(){
+  [0,1].forEach(i => {
+    const el = $('slot' + i), c = cards[i];
+    if (c){ el.classList.add('filled'); el.innerHTML = cardHtml(c); }
+    else { el.classList.remove('filled'); el.textContent = '+'; }
+  });
+  if (typeof updatePreview === 'function') updatePreview();
+}
+function renderBoardPrev(){
+  $('boardCards').innerHTML = boardBuf.map(cardHtml).join(' ') || '<span class="mini">—</span>';
+}
+function openSheet(mode, slot){
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  sheetMode = mode; pendingRank = null;
+  document.querySelectorAll('#rankGrid button').forEach(x => x.classList.remove('on'));
+  if (mode === 'hand'){
+    pickSlot = slot;
+    $('sheetTitle').textContent = 'Hole card ' + (slot + 1);
+    $('boardPrev').hidden = true;
+  } else {
+    boardBuf = [];
+    $('sheetTitle').textContent = 'Board cards';
+    $('boardPrev').hidden = false;
+    renderBoardPrev();
+  }
+  $('sheet').hidden = false;
+}
+function closeSheet(){ $('sheet').hidden = true; }
+$('slot0').onclick = () => { hideSavedCard(); openSheet('hand', 0); };
+$('slot1').onclick = () => { hideSavedCard(); openSheet('hand', 1); };
+$('bsBoard').onclick = () => { boardBuf.pop(); renderBoardPrev(); };
+$('sheetDone').onclick = () => {
+  if (sheetMode === 'board' && boardBuf.length){
+    const a = $('action');
+    const txt = a.value;
+    const needSep = txt.trim() && !/\/\s*$/.test(txt.trimEnd());
+    const lead = txt && !/\s$/.test(txt) ? ' ' : '';
+    insertAtEnd(a, lead + (needSep ? '/ ' : '') + '(' + boardBuf.join('') + ') ');
+  }
+  closeSheet();
+};
+RANKS.forEach(r => {
+  const b = document.createElement('button');
+  b.textContent = r;
+  b.onclick = () => {
+    pendingRank = r;
+    document.querySelectorAll('#rankGrid button').forEach(x => x.classList.toggle('on', x.textContent === r));
+  };
+  $('rankGrid').appendChild(b);
+});
+Object.keys(SUITS).forEach(s => {
+  const b = document.createElement('button');
+  b.innerHTML = '<span class="suit-' + s + '">' + SUITS[s] + '</span>';
+  b.onclick = () => {
+    if (!pendingRank) return toast('pick a rank first');
+    const card = pendingRank + s;
+    const used = cards.concat(boardBuf).filter(Boolean);
+    if (used.indexOf(card) >= 0) return toast(card[0] + SUITS[s] + ' already used');
+    if (sheetMode === 'hand'){
+      cards[pickSlot] = card; renderSlots();
+      if (pickSlot === 0 && !cards[1]) { pickSlot = 1; $('sheetTitle').textContent = 'Hole card 2'; }
+      else closeSheet();
+    } else {
+      if (boardBuf.length >= 5) return toast('board is full');
+      boardBuf.push(card); renderBoardPrev();
+    }
+    pendingRank = null;
+    document.querySelectorAll('#rankGrid button').forEach(x => x.classList.remove('on'));
+  };
+  $('suitGrid').appendChild(b);
+});
+
+/* ---------- action token strip ---------- */
+function insertAtEnd(el, text){
+  el.value = el.value + text;
+  el.dispatchEvent(new Event('input'));
+}
+function insertToken(el, text){
+  const s = el.selectionStart != null && document.activeElement === el ? el.selectionStart : el.value.length;
+  const e2 = el.selectionEnd != null && document.activeElement === el ? el.selectionEnd : el.value.length;
+  const before = el.value.slice(0, s), after = el.value.slice(e2);
+  const lead = before && !/\s$/.test(before) ? ' ' : '';
+  el.value = before + lead + text + after;
+  const p = (before + lead + text).length;
+  if (document.activeElement === el) el.selectionStart = el.selectionEnd = p;
+}
+const TOKENS = [
+  {t:'x'}, {t:'c'}, {t:'f'}, {t:'b', glue:true}, {t:'r', glue:true}, {t:'3b', glue:true},
+  {t:'jam'}, {t:'/'}, {t:'+board', wide:true, board:true}, {t:'⌫', del:true},
+  // villain seat prefixes — glue so "btn"+"3b"+"45" composes to btn3b45
+  {t:'utg', glue:true, posk:true}, {t:'mp', glue:true, posk:true}, {t:'co', glue:true, posk:true},
+  {t:'btn', glue:true, posk:true}, {t:'sb', glue:true, posk:true}, {t:'bb', glue:true, posk:true}
+];
+TOKENS.forEach(k => {
+  const b = document.createElement('button');
+  b.textContent = k.t;
+  if (k.wide) b.className = 'wide';
+  if (k.posk) b.className = 'posk';
+  // keep the keyboard open: don't let the button steal focus from the textarea
+  b.addEventListener('pointerdown', e => e.preventDefault());
+  b.onclick = () => {
+    hideSavedCard();
+    tick();
+    const a = $('action');
+    if (k.board) return openSheet('board', 0);
+    if (k.del){ a.value = a.value.replace(/\s*\S+\s*$/, ''); a.dispatchEvent(new Event('input')); return; }
+    insertToken(a, k.t + (k.glue ? '' : ' '));
+  };
+  $('tokStrip').appendChild(b);
+});
+
+let flagOn = false;
+$('flagBtn').onclick = () => { flagOn = !flagOn; $('flagBtn').classList.toggle('on', flagOn); updatePreview(); };
+
+/* ---------- live shorthand preview: the form teaches the notation ---------- */
+function draftHand(){
+  return {
+    game: segGame.get(), stakes: $('stakes').value.trim(), pos: selPos,
+    c1: cards[0], c2: cards[1], eff: $('eff').value.trim(),
+    action: $('action').value.trim().replace(/\s+/g,' '),
+    sign: segWL.get(), amount: cleanNum($('amount').value),
+    note: $('note').value.trim(), flag: flagOn
+  };
+}
+function updatePreview(){
+  const d = draftHand();
+  const empty = !d.pos && !d.c1 && !d.action && !d.amount;
+  $('livePrev').textContent = empty ? '—' : shorthand(d);
+  if (!d.action){ $('prevStreets').innerHTML = ''; return; }
+  const names = ['pre','flop','turn','river'];
+  const parts = d.action.split('/').map(s => s.trim());
+  $('prevStreets').innerHTML = parts.map((seg2, i) => {
+    const m = /^\(([^)]*)\)/.exec(seg2);
+    const nm = names[i] || ('st' + i);
+    return '<span class="chip">' + nm + (m ? ' ' + colorCards(m[1]) : '') + '</span>';
+  }).join(' ') + (parts.length > 4 ? ' <span class="neg-net">too many streets?</span>' : '');
+}
+$('fmtHelp').onclick = () => { $('fmtSheet').hidden = !$('fmtSheet').hidden; };
+['stakes','eff','action','amount','note'].forEach(id => $(id).addEventListener('input', updatePreview));
+$('posGrid').addEventListener('click', updatePreview);
+$('segWL').addEventListener('click', updatePreview);
+$('segGame').addEventListener('click', updatePreview);
+
+/* ---------- save / edit hand ---------- */
+function shorthand(h){
+  let head;
+  const cardStr = (h.c1 || '') + (h.c2 || '');
+  if (h.game === 'mtt'){
+    head = ['mtt', h.eff ? h.eff + 'bb' : '', h.pos || '', cardStr].filter(Boolean).join(' ');
+  } else {
+    head = [h.stakes || '?', h.pos || '', cardStr, h.eff || ''].filter(Boolean).join(' ');
+  }
+  const res = h.amount ? (h.sign || '?') + netStr(h.amount, h.game) : '';
+  const segs = [head, h.action || '', res, h.note || ''];
+  while (segs.length > 1 && !segs[segs.length - 1]) segs.pop();
+  return segs.join(' | ') + (h.flag ? ' !!' : '');
+}
+// Won/Lost carries the sign, so the amount field must never carry one too — a record that
+// says won and means lost poisons the splits quietly, which is the one failure the honesty
+// rule in CLAUDE.md exists to prevent.
+function cleanNum(v){
+  const m = String(v == null ? '' : v).replace(/[^0-9.]/g, '').match(/^\d*\.?\d*/);
+  return m ? m[0] : '';
+}
+function handNetStr(h){
+  if (!h.amount) return '';
+  const minus = h.sign === '-';
+  return (minus ? '−' : '+') + (h.game === 'mtt' ? netStr(h.amount, 'mtt') + 'bb' : '$' + netStr(h.amount, 'cash'));
+}
+function resetForm(){
+  selPos = null; cards = [null,null]; flagOn = false; editingId = null;
+  formSessionId = db.activeSession ? db.activeSession.id : null;   // pinned for this entry
+  document.querySelectorAll('#posGrid .pos').forEach(x => x.classList.remove('on'));
+  $('flagBtn').classList.remove('on'); segWL.set(null);
+  ['eff','action','amount','note'].forEach(id => $(id).value = '');
+  $('saveHand').textContent = 'Save hand';
+  $('editBar').hidden = true;
+  renderSlots();
+}
+let savedCardTimer;
+function showSavedCard(h, updated){
+  const el = $('savedCard');
+  el.innerHTML = '<b>' + (updated ? 'Updated' : 'Saved') + ' ✓</b> ' +
+    cardHtml(h.c1) + cardHtml(h.c2) + ' ' + esc((h.pos || '').toUpperCase()) +
+    ' <span class="' + (h.sign === '-' ? 'neg-net' : 'pos-net') + '">' + esc(handNetStr(h)) + '</span>' +
+    (h.flag ? ' ⚑' : '') + '<button id="viewSaved">View</button>';
+  el.hidden = false;
+  $('viewSaved').onclick = () => { openHand = h.id; showTab('History'); segHist.set('hands'); renderHist(); renderHands(); };
+  clearTimeout(savedCardTimer); savedCardTimer = setTimeout(hideSavedCard, 8000);
+}
+function hideSavedCard(){ $('savedCard').hidden = true; }
+
+$('saveHand').onclick = () => {
+  // Which session this hand belongs to is decided when the form is OPENED, not when Save is
+  // tapped. Read it live and a session ending in another tab mid-entry silently orphans the
+  // hand you were half-way through typing.
+  // And an EDIT never re-assigns: editing a hand from March while tonight's session runs
+  // must not quietly move it to tonight. Editing may change the hand, never its session.
+  const prior = editingId ? db.hands.find(x => x.id === editingId) : null;
+  const h = {
+    id: editingId || uid(),
+    ts: Date.now(),
+    game: segGame.get(), stakes: $('stakes').value.trim(), venue: $('venue').value.trim(),
+    pos: selPos, c1: cards[0], c2: cards[1], eff: cleanNum($('eff').value),
+    action: $('action').value.trim().replace(/\s+/g,' '),
+    sign: segWL.get(), amount: cleanNum($('amount').value),
+    note: $('note').value.trim(), flag: flagOn, up: Date.now(),
+    sessionId: prior ? (prior.sessionId || null) : formSessionId
+  };
+  if (!h.pos && !h.c1 && !h.action) return toast('empty hand');
+  if (h.amount && !h.sign) return toast('won or lost?');
+  let updated = false;
+  if (editingId){
+    const i = db.hands.findIndex(x => x.id === editingId);
+    if (i >= 0){ h.ts = db.hands[i].ts; db.hands[i] = h; updated = true; }
+    else db.hands.unshift(h);
+  } else {
+    db.hands.unshift(h);
+  }
+  save();
+  resetForm(); renderHands(); renderSession();
+  showSavedCard(h, updated);
+  if (!updated) setTimeout(maybePromptBackup, 900);
+  toast(updated ? 'hand updated' : 'hand saved' + (h.flag ? ' ⚑' : ''));
+};
+['amount','eff'].forEach(id => {
+  const el = $(id); if (!el || !el.addEventListener) return;
+  el.addEventListener('input', () => {
+    const c = cleanNum(el.value);
+    if (c !== el.value) el.value = c;      // strips a typed minus, letters, stray symbols
+    updatePreview();
+  });
+});
+$('cancelEdit').onclick = () => { resetForm(); toast('edit cancelled'); };
+
+/* ---------- typing mode ----------
+   Confirmed on a real iOS build: focusing the action field put the keyboard over the live
+   shorthand preview, and the tab bar detached and floated mid-screen. The preview is the
+   only signal that the parser understood you — losing it mid-entry switches off the
+   shorthand's safety net exactly when it is needed. */
+let typing = false;
+function setTyping(on){
+  typing = !!on;
+  document.body.classList.toggle('typing', typing);
+  if (typing) setTimeout(() => {
+    const p = $('livePrev');
+    if (p && p.scrollIntoView) p.scrollIntoView({block: 'center', behavior: 'smooth'});
+  }, 180);
+}
+['action','note','amount','eff','stakes','venue'].forEach(id => {
+  const el = $(id); if (!el || !el.addEventListener) return;
+  el.addEventListener('focus', () => setTyping(true));
+  el.addEventListener('blur', () => setTyping(false));
+});
+
+function editHand(id){
+  const h = db.hands.find(x => x.id === id); if (!h) return;
+  editingId = id;
+  segGame.set(h.game || 'cash');
+  $('stakes').value = h.stakes || ''; $('venue').value = h.venue || '';
+  selPos = h.pos || null;
+  document.querySelectorAll('#posGrid .pos').forEach(x => x.classList.toggle('on', x.dataset.v === selPos));
+  cards = [h.c1 || null, h.c2 || null]; renderSlots();
+  $('eff').value = h.eff || ''; $('action').value = h.action || '';
+  segWL.set(h.sign || null); $('amount').value = h.amount || '';
+  $('note').value = h.note || '';
+  flagOn = !!h.flag; $('flagBtn').classList.toggle('on', flagOn);
+  $('saveHand').textContent = 'Update hand';
+  $('editBar').hidden = false; hideSavedCard();
+  updatePreview();
+  showTab('Log');
+}
+
+/* ---------- hands history ---------- */
+let openHand = null, handFilter = 'all';
+$('filtAll').onclick = () => { handFilter = 'all'; renderHands(); };
+$('filtFlag').onclick = () => { handFilter = 'flag'; renderHands(); };
+$('filtReview').onclick = () => { handFilter = 'review'; renderHands(); };
+$('filtAcr').onclick = () => { handFilter = 'acr'; renderHands(); };
+$('filtMine').onclick = () => { handFilter = 'mine'; renderHands(); };
+$('filtRaw').onclick = () => { handFilter = 'raw'; renderHands(); };
+
+function streetRows(action){
+  if (!action) return '';
+  const names = ['pre','flop','turn','river'];
+  return action.split('/').map((part, i) => {
+    part = part.trim();
+    const m = part.match(/^\(([^)]*)\)\s*(.*)$/);
+    const board = m ? m[1] : null;
+    const act = m ? m[2] : part;
+    return '<div class="street"><span class="sname">' + (names[i] || 'st' + i) + '</span>' +
+      (board ? '<span class="board">' + colorCards(board) + '</span>' : '') +
+      '<span>' + esc(act) + '</span></div>';
+  }).join('');
+}
+function dayNet(hands){
+  let cash = 0, bb = 0;
+  hands.forEach(h => {
+    if (!h.amount) return;
+    const v = num(h.amount) * (h.sign === '-' ? -1 : 1);
+    if (h.game === 'mtt') bb += v; else cash += v;
+  });
+  cash = Math.round(cash * 100) / 100; bb = Math.round(bb * 10) / 10;   // kill float drift from summing
+  const parts = [];
+  if (cash) parts.push('<span class="' + (cash < 0 ? 'neg-net' : 'pos-net') + '">' + (cash < 0 ? '−' : '+') + '$' + Math.abs(cash).toLocaleString() + '</span>');
+  if (bb) parts.push('<span class="' + (bb < 0 ? 'neg-net' : 'pos-net') + '">' + (bb < 0 ? '−' : '+') + Math.abs(bb) + 'bb</span>');
+  return parts.join(' · ');
+}
+function renderHands(){
+  const HOLDEM = db.hands.filter(h => h.source !== 'acr-raw');   // structured replay view (manual + ACR Hold'em)
+  const RAW = db.hands.filter(h => h.source === 'acr-raw');      // non-Hold'em ACR imports — raw text only (parsers TBD)
+  const flagged = HOLDEM.filter(h => h.flag).length;
+  const reviewN = HOLDEM.filter(h => h.review && !h.reviewed).length;   // open items only
+  const acrN = HOLDEM.filter(h => h.source === 'acr').length;
+  const mineN = HOLDEM.length - acrN;
+  $('filtAll').textContent = 'All (' + HOLDEM.length + ')';
+  $('filtFlag').textContent = '⚑ Flagged (' + flagged + ')';
+  $('filtReview').textContent = '⚐ Review (' + reviewN + ')';
+  $('filtAcr').textContent = 'ACR (' + acrN + ')';
+  $('filtMine').textContent = 'Manual (' + mineN + ')';
+  $('filtRaw').textContent = 'Non-Hold’em (' + RAW.length + ')';
+  $('filtReview').hidden = reviewN === 0;           // appears once the analyzer has tagged leaks
+  $('filtAcr').hidden = acrN === 0;                 // only show import filters once there are imports
+  $('filtMine').hidden = acrN === 0;
+  $('filtRaw').hidden = RAW.length === 0;           // only once non-Hold'em imports exist
+  ['all', 'flag', 'review', 'acr', 'mine', 'raw'].forEach(f => $('filt' + f.charAt(0).toUpperCase() + f.slice(1)).classList.toggle('on', handFilter === f));
+  const box = $('handList');
+  if (handFilter === 'raw'){ renderRawHands(box, RAW); return; }   // separate section: Stud/Omaha H/L raw text
+  let hands = handFilter === 'flag' ? HOLDEM.filter(h => h.flag)
+    : handFilter === 'review' ? HOLDEM.filter(h => h.review && !h.reviewed)
+    : handFilter === 'acr' ? HOLDEM.filter(h => h.source === 'acr')
+    : handFilter === 'mine' ? HOLDEM.filter(h => h.source !== 'acr')
+    : HOLDEM;
+  const q = ($('histSearch') && $('histSearch').value || '').trim().toLowerCase();
+  if (q) hands = hands.filter(h => [h.c1, h.c2, h.pos, h.stakes, h.venue, h.action, h.note]
+    .filter(Boolean).join(' ').toLowerCase().includes(q));
+  if (!hands.length){
+    if (db.hands.length){
+      box.innerHTML = '<p class="mini">' + (
+        handFilter === 'flag' ? 'Nothing flagged. Tap ⚑ while logging a hand you want to come back to — flagged hands are replayed to you in Study.'
+        : handFilter === 'review' ? 'Nothing waiting for review.'
+        : 'No hands in this view.') + '</p>';
+      return;
+    }
+    box.innerHTML = '<p class="mini">No hands yet. Log the ones that mattered — position, cards, the key action. ' +
+      'Flag ⚑ anything you want to review later.</p>' +
+      '<div class="emptycta"><button id="emptyNew">Log your first hand</button> ' +
+      '<button id="emptySample">Add sample hands</button></div>';
+    $('emptyNew').onclick = () => showTab('Log');
+    $('emptySample').onclick = loadSamples;
+    return;
+  }
+  const byDay = {};
+  hands.forEach(h => { const d = dateOf(h.ts); (byDay[d] = byDay[d] || []).push(h); });
+  box.innerHTML = Object.keys(byDay).sort().reverse().map(d => {
+    const list = byDay[d];
+    return '<div class="dayhead"><span>' + esc(shortDate(d)) + ' · ' + list.length + ' hand' + (list.length > 1 ? 's' : '') + '</span>' +
+      '<span class="dnet">' + dayNet(list) + '</span></div>' +
+      list.map(h => {
+        const cs = cardHtml(h.c1) + cardHtml(h.c2);
+        const meta = [h.game === 'mtt' ? 'MTT' : h.stakes, (h.pos || '').toUpperCase()].filter(Boolean).join(' · ');
+        const netCls = !h.amount ? 'zero-net' : (h.sign === '-' ? 'neg-net' : 'pos-net');
+        const open = openHand === h.id;
+        return '<div class="item" data-id="' + h.id + '">' +
+          '<div class="top" data-act="toggle"><span class="sum"><span class="cards">' + cs + '</span>' +
+          (cs ? ' · ' : '') + esc(meta) + (h.flag ? ' ⚑' : '') + (h.review ? (h.reviewed ? ' <span class="rvw" style="opacity:.45">✓</span>' : ' <span class="rvw">⚐</span>') : '') + '</span>' +
+          '<span class="net ' + netCls + '">' + esc(handNetStr(h)) + '</span></div>' +
+          (open ? '<div class="detail">' +
+            (h.review ? '<div class="reviewtag"' + (h.reviewed ? ' style="opacity:.5"' : '') + '>' + (h.reviewed ? '✓ reviewed · ' : '⚐ ') + esc(h.review) + '</div>' : '') +
+            streetRows(h.action) +
+            (h.note ? '<div class="notes">' + esc(h.note) + '</div>' : '') +
+            '<div class="notes">' + esc(timeOf(h.ts)) + (h.eff ? ' · eff ' + esc(h.eff) + (h.game === 'mtt' ? 'bb' : '') : '') +
+            (h.venue ? ' · ' + esc(h.venue) : '') + '</div>' +
+            '<code>' + esc(shorthand(h)) + '</code>' +
+            '<div class="acts">' +
+            '<button data-act="detail">Open</button>' +
+            '<button data-act="copy">Copy</button>' +
+            '<button data-act="edit">Edit</button>' +
+            '<button data-act="flag">' + (h.flag ? 'Unflag' : 'Flag ⚑') + '</button>' +
+            (h.review ? '<button data-act="reviewed">' + (h.reviewed ? 'Un-review' : 'Reviewed ✓') + '</button>' : '') +
+            '<button data-act="link">' + (h.sessionId ? 'Re-link' : 'Link') + '</button>' +
+            '<button data-act="del" style="color:var(--red)">Delete</button>' +
+            '</div>' + (linkingId === h.id ? linkChooser(h) : '') + '</div>' : '') +
+          '</div>';
+      }).join('');
+  }).join('');
+}
+// non-Hold'em ACR imports (Stud H/L, Omaha H/L) — raw hand text until game-specific parsers land
+function renderRawHands(box, raw){
+  if (!raw.length){ box.innerHTML = '<p class="mini">No non-Hold’em hands imported.</p>'; return; }
+  const byDay = {};
+  raw.forEach(h => { const d = dateOf(h.ts); (byDay[d] = byDay[d] || []).push(h); });
+  box.innerHTML = '<p class="mini">Raw ACR imports — Stud H/L &amp; Omaha H/L. Structured parsing &amp; analysis are on the roadmap; full hand text below.</p>' +
+    Object.keys(byDay).sort().reverse().map(d => {
+      const list = byDay[d];
+      return '<div class="dayhead"><span>' + esc(shortDate(d)) + ' · ' + list.length + ' hand' + (list.length > 1 ? 's' : '') + '</span></div>' +
+        list.map(h => {
+          const open = openHand === h.id;
+          const title = [h.gameType || (h.game === 'omaha-hl' ? 'Omaha H/L' : 'Stud H/L'), h.stakes].filter(Boolean).join(' · ');
+          return '<div class="item" data-id="' + h.id + '">' +
+            '<div class="top" data-act="toggle"><span class="sum">' + esc(title) + '</span>' +
+            '<span class="net zero-net">raw</span></div>' +
+            (open ? '<div class="detail">' +
+              '<pre style="white-space:pre-wrap;word-break:break-word;font:11px/1.45 ui-monospace,Menlo,monospace;max-height:320px;overflow:auto;margin:6px 0;opacity:.82">' + esc(h.raw || '(no hand text)') + '</pre>' +
+              (h.note ? '<div class="notes">' + esc(h.note) + '</div>' : '') +
+              '<div class="notes">' + esc(timeOf(h.ts)) + (h.venue ? ' · ' + esc(h.venue) : '') + '</div>' +
+              '<div class="acts"><button data-act="link">' + (h.sessionId ? 'Re-link' : 'Link') + '</button></div>' +
+              (linkingId === h.id ? linkChooser(h) : '') + '</div>' : '') +
+            '</div>';
+        }).join('');
+    }).join('');
+}
+// retro-link a hand to any logged tournament / cash session (live session not required)
+let linkingId = null;
+function linkChooser(h){
+  const rows = [
+    ...db.tourneys.map(r => ({ id: r.id, sid: r.sessionId, kind: 't', label: shortDate(r.date) + ' · ' + [r.venue, r.event || ('$' + r.buyin)].filter(Boolean).join(' · ') })),
+    ...db.sessions.map(r => ({ id: r.id, sid: r.sessionId, kind: 's', label: shortDate(r.date) + ' · ' + [r.venue, r.stakes, 'cash'].filter(Boolean).join(' · ') }))
+  ].slice(0, 10);
+  if (!rows.length) return '<div class="linkpick mini">No logged tournaments or sessions yet — log one in the Log tab first.</div>';
+  return '<div class="linkpick">' +
+    rows.map(r => '<button data-act="linkto" data-rid="' + r.id + '" data-rkind="' + r.kind + '"' +
+      (h.sessionId && r.sid === h.sessionId ? ' class="cur"' : '') + '>' + esc(r.label) + '</button>').join('') +
+    (h.sessionId ? '<button data-act="unlink" style="color:var(--red)">Unlink</button>' : '') +
+    '</div>';
+}
+$('handList').onclick = e => {
+  const act = e.target.closest('[data-act]'); if (!act) return;
+  const item = e.target.closest('.item'); if (!item) return;
+  const id = item.dataset.id;
+  const h = db.hands.find(x => x.id === id); if (!h) return;
+  const a = act.dataset.act;
+  if (a === 'toggle'){ openHand = openHand === id ? null : id; linkingId = null; renderHands(); }
+  if (a === 'copy') copyText(shorthand(h), 'hand');
+  if (a === 'edit') editHand(id);
+  if (a === 'flag'){ h.flag = !h.flag; h.up = Date.now(); save(); renderHands(); }
+  if (a === 'reviewed'){ h.reviewed = !h.reviewed; h.up = Date.now(); save(); renderHands(); toast(h.reviewed ? 'cleared from Review' : 'back in Review'); }
+  if (a === 'link'){ linkingId = linkingId === id ? null : id; renderHands(); }
+  if (a === 'linkto'){
+    const list = act.dataset.rkind === 't' ? db.tourneys : db.sessions;
+    const row = list.find(r => r.id === act.dataset.rid);
+    if (row){
+      if (!row.sessionId){ row.sessionId = row.id; row.up = Date.now(); }   // older rows become linkable on first use
+      h.sessionId = row.sessionId; h.up = Date.now();
+      save(); linkingId = null; renderHands(); renderLog(); toast('hand linked');
+    }
+  }
+  if (a === 'detail'){ openHandDetail(h.id); return; }
+  if (a === 'unlink'){ h.sessionId = null; h.up = Date.now(); save(); linkingId = null; renderHands(); renderLog(); toast('unlinked'); }
+  if (a === 'del'){
+    ask('Delete this hand?', 'This cannot be undone.' + (h.review ? ' To just clear it from the Review list, use “Reviewed ✓” instead.' : ''), 'Delete', true)
+      .then(yes => { if (yes) deleteHand(h.id); });
+    return;
+  }
+};
+function deleteHand(id){
+  tombstone(id);
+  db.hands = db.hands.filter(x => x.id !== id);
+  openHand = null; save(); renderHands(); renderHome(); renderProgress();
+  toast('hand deleted');
+}
+
+/* ---------- log tab ---------- */
+// logging a result after the fact: offer to sweep that day's unlinked hands into it
+function offerOrphanLink(row){
+  if (row.sessionId) return;                       // came from a live End-session flow
+  const orphans = db.hands.filter(h => !h.sessionId && dateOf(h.ts) === row.date);
+  if (!orphans.length) return;
+  ask('Link ' + orphans.length + ' hand' + (orphans.length > 1 ? 's' : '') + '?',
+      'Found ' + orphans.length + ' unlinked hand' + (orphans.length > 1 ? 's' : '') + ' from ' + row.date + '. Attach ' + (orphans.length > 1 ? 'them' : 'it') + ' to this entry?', 'Link')
+    .then(yes => { if (yes) linkOrphans(orphans, row); });
+}
+function linkOrphans(orphans, row){
+  row.sessionId = row.id; row.up = Date.now();
+  orphans.forEach(h => { h.sessionId = row.id; h.up = Date.now(); });
+  save(); renderHands(); renderLog();
+  toast(orphans.length + (orphans.length === 1 ? ' hand linked' : ' hands linked'));
+}
+const segLog = seg('segLog', v => {
+  $('formT').hidden = v !== 't';
+  $('formS').hidden = v !== 's';
+  renderLog();
+});
+$('tDate').value = todayISO();
+$('sDate').value = todayISO();
+
+$('saveT').onclick = () => {
+  const t = {
+    id: uid(), date: $('tDate').value || todayISO(), venue: $('tVenue').value.trim(),
+    event: $('tEvent').value.trim(), buyin: $('tBuyin').value.trim(),
+    entries: $('tEntries').value.trim() || '1', field: $('tField').value.trim(),
+    place: $('tPlace').value.trim(), cash: $('tCash').value.trim() || '0',
+    bounty: $('tBounty').value.trim() || '0',
+    notes: $('tNotes').value.trim(), up: Date.now(),
+    sessionId: endingSession ? endingSession.id : null
+  };
+  if (!t.buyin) return toast('buy-in missing');
+  endingSession = null; $('endBanner').hidden = true;
+  offerOrphanLink(t);
+  db.tourneys.unshift(t); save();
+  ['tEvent','tBuyin','tField','tPlace','tCash','tBounty','tNotes'].forEach(id => $(id).value = '');
+  $('tEntries').value = '1';
+  $('resultPanel').hidden = true;
+  renderLog(); renderProgress(); renderSession(); renderHome(); renderLiveBar();
+  toast('tournament saved');
+};
+$('saveS').onclick = () => {
+  const s = {
+    id: uid(), date: $('sDate').value || todayISO(), venue: $('sVenue').value.trim(),
+    stakes: $('sStakes').value.trim(), hours: $('sHours').value.trim(),
+    buyin: $('sBuyin').value.trim(), cashout: $('sCashout').value.trim(),
+    notes: $('sNotes').value.trim(), up: Date.now(),
+    sessionId: endingSession ? endingSession.id : null
+  };
+  if (!s.buyin && !s.cashout) return toast('amounts missing');
+  endingSession = null; $('endBanner').hidden = true;
+  offerOrphanLink(s);
+  db.sessions.unshift(s); save();
+  ['sHours','sBuyin','sCashout','sNotes'].forEach(id => $(id).value = '');
+  $('resultPanel').hidden = true;
+  renderLog(); renderProgress(); renderSession(); renderHome(); renderLiveBar();
+  toast('session saved');
+};
+
+function renderLog(){
+  const mode = segLog.get();
+  const stats = $('logStats'), box = $('logList');
+  if (mode === 't'){
+    const rows = db.tourneys;
+    const inv = rows.reduce((a,r) => a + num(r.buyin) * Math.max(num(r.entries),1), 0);
+    const ret = rows.reduce((a,r) => a + num(r.cash) + num(r.bounty), 0);   // returns incl PKO bounties
+    const ko = rows.reduce((a,r) => a + num(r.bounty), 0);
+    const itm = rows.filter(r => num(r.cash) > 0).length;
+    const net = Math.round((ret - inv) * 100) / 100;
+    stats.innerHTML = !rows.length ? '' :
+      '<span class="chip">n <b>' + rows.length + '</b></span>' +
+      '<span class="chip">net <b class="' + (net < 0 ? 'neg-net' : 'pos-net') + '">' + (net<0?'−':'+') + '$' + Math.abs(net).toLocaleString() + '</b></span>' +
+      '<span class="chip">ROI <b>' + (inv ? (net/inv*100).toFixed(1) : '0') + '%</b></span>' +
+      (ko ? '<span class="chip">KO <b class="pos-net">+$' + (Math.round(ko*100)/100).toLocaleString() + '</b></span>' : '') +
+      '<span class="chip">ITM <b>' + itm + '/' + rows.length + '</b></span>';
+    box.innerHTML = !rows.length ? '<p class="mini">No tournaments yet.</p>' :
+      rows.map(r => {
+        const net2 = Math.round((num(r.cash) + num(r.bounty) - num(r.buyin) * Math.max(num(r.entries),1)) * 100) / 100;
+        const sum = [shortDate(r.date), r.venue, '$' + r.buyin + (num(r.entries) > 1 ? ' ×' + r.entries : ''),
+          r.place && r.field ? r.place + '/' + r.field : r.place,
+          num(r.bounty) > 0 ? '+$' + (Math.round(num(r.bounty)*100)/100) + ' KO' : ''].filter(Boolean).join(' · ');
+        return logItem(r.id, 't', sum, net2, r.sessionId);
+      }).join('');
+  } else {
+    const rows = db.sessions;
+    const net = rows.reduce((a,r) => a + num(r.cashout) - num(r.buyin), 0);
+    const hrs = rows.reduce((a,r) => a + num(r.hours), 0);
+    stats.innerHTML = !rows.length ? '' :
+      '<span class="chip">n <b>' + rows.length + '</b></span>' +
+      '<span class="chip">net <b class="' + (net < 0 ? 'neg-net' : 'pos-net') + '">' + (net<0?'−':'+') + '$' + Math.abs(net).toLocaleString() + '</b></span>' +
+      '<span class="chip">hrs <b>' + hrs.toFixed(1) + '</b></span>' +
+      '<span class="chip">rate <b>$' + (hrs ? (net/hrs).toFixed(0) : '0') + '/hr</b></span>';
+    box.innerHTML = !rows.length ? '<p class="mini">No sessions yet.</p>' :
+      rows.map(r => {
+        const net2 = num(r.cashout) - num(r.buyin);
+        const sum = [shortDate(r.date), r.venue, r.stakes, r.hours ? r.hours + 'h' : ''].filter(Boolean).join(' · ');
+        return logItem(r.id, 's', sum, net2, r.sessionId);
+      }).join('');
+  }
+}
+function logItem(id, kind, sum, net, sessionId){
+  const hc = sessionId ? db.hands.filter(h => h.sessionId === sessionId).length : 0;
+  if (hc) sum += ' · ' + hc + '♠';
+  const cls = net < 0 ? 'neg-net' : (net > 0 ? 'pos-net' : 'zero-net');
+  const netStr = (net < 0 ? '−' : '+') + '$' + Math.abs(net).toLocaleString();
+  return '<div class="item" data-id="' + id + '" data-kind="' + kind + '">' +
+    '<div class="top"><span class="sum">' + esc(sum) + '</span>' +
+    '<span class="net ' + cls + '">' + netStr + '</span>' +
+    '<button data-act="del" style="background:none;border:0;color:var(--dim);font-size:16px;padding:0 2px">✕</button>' +
+    '</div></div>';
+}
+// Deleting a results row must never take hands with it. Hands are the expensive thing the
+// player made; a results row is a few numbers they can retype. So the hands stay and their
+// link is cleared — a dangling sessionId is worse than none, because the re-link UI would
+// go on offering a row that no longer exists.
+function deleteResult(id, kind){
+  tombstone(id);
+  const gone = kind === 't' ? db.tourneys.find(x => x.id === id) : db.sessions.find(x => x.id === id);
+  const sid = gone && (gone.sessionId || gone.id);
+  let orphaned = 0;
+  if (sid) db.hands.forEach(h => { if (h.sessionId === sid){ h.sessionId = null; h.up = Date.now(); orphaned++; } });
+  if (kind === 't') db.tourneys = db.tourneys.filter(x => x.id !== id);
+  else db.sessions = db.sessions.filter(x => x.id !== id);
+  if (orphaned) setTimeout(() => toast(orphaned + (orphaned === 1 ? ' hand kept' : ' hands kept') + ', now unlinked'), 400);
+  return orphaned;
+}
+$('logList').onclick = e => {
+  const act = e.target.closest('[data-act]'); if (!act) return;
+  const item = e.target.closest('.item');
+  ask('Delete this entry?', 'Any hands linked to it are kept and unlinked.', 'Delete', true)
+    .then(yes => { if (yes) deleteResult(item.dataset.id, item.dataset.kind); });
+  save(); renderLog();
+};
+
+/* ---------- data / backup ---------- */
+function hasData(){ return db.hands.length || db.tourneys.length || db.sessions.length || (db.drills && db.drills.length); }
+function refreshDataPanel(){
+  const el = $('dataStatus');
+  if (!el) return;
+  $('sampleBtn').textContent = hasSamples() ? 'Remove sample data' : 'Add sample data';
+  const s = Store.describe();
+  const last = db.prefs.lastExportTs ? shortDate(dateOf(db.prefs.lastExportTs)) + ' ' + timeOf(db.prefs.lastExportTs) : 'never';
+  if (!hasData()){
+    el.innerHTML = 'Nothing logged yet. Everything you log stays on this device — it is never uploaded anywhere.';
+    return;
+  }
+  el.innerHTML = '<b>' + db.hands.length + ' hands</b>, ' + db.tourneys.length + ' tournaments, ' +
+    db.sessions.length + ' sessions, ' + (db.drills || []).length + ' drill answers · ' +
+    Math.max(1, Math.round(s.bytes / 1024)) + ' KB' +
+    '<br><span class="dim">Stored on ' + esc(s.backend) + '. Nothing leaves this device — there is no account and no server.' +
+    (s.mirrored ? '' : ' <b>Browser storage can be cleared by the system</b>, so save a backup file.') +
+    '</span><br><span class="dim">Last backup file saved: <b>' + esc(last) + '</b></span>' +
+    (s.error ? '<br><span style="color:var(--red)">Last write failed (' + esc(s.error) + ') — save a backup now.</span>' : '');
+}
+// Restoring a backup: shared by the file picker and the paste box.
+function restoreFrom(data, label){
+  if (!data || (!data.hands && !data.tourneys && !data.sessions)) return toast('not a pokerlog backup');
+  // A backup written by a newer version may hold fields this build would silently drop on
+  // the next save. Refuse rather than quietly losing them.
+  if (data.v != null && data.v > SCHEMA) return toast('That backup is from a newer version — update the app first');
+  ask('Replace everything with this backup?', 'Your current hands, sessions and drill history are overwritten.', 'Restore', true)
+    .then(yes => {
+      if (!yes) return;
+      db = Object.assign(fresh(), data);
+      db.prefs = Object.assign(fresh().prefs, db.prefs || {});
+      persist(); renderAll(); refreshDataPanel();
+      toast(label || 'restored');
+    });
+}
+$('importFile').onchange = (ev) => {
+  const f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    let data;
+    try { data = JSON.parse(rd.result); } catch(e){ return toast('invalid backup file'); }
+    restoreFrom(data, 'restored from file');
+  };
+  rd.onerror = () => toast('could not read file');
+  rd.readAsText(f);
+  ev.target.value = '';
+};
+const BACKUP_PROMPT_AT = 25;
+function maybePromptBackup(){
+  if (db.prefs.backupPrompted || db.prefs.lastExportTs) return false;
+  if (db.hands.length < BACKUP_PROMPT_AT) return false;
+  db.prefs.backupPrompted = true; persist();
+  ask('Save a backup?', 'You have logged ' + db.hands.length + ' hands. They live only on this phone — deleting the app deletes them.', 'Save backup')
+    .then(yes => { if (yes){ showTab('Data'); setTimeout(exportBackup, 200); } });
+  return true;
+}
+/* ---------- export ----------
+   This was a browser download — a Blob and an anchor click — which WKWebView simply ignores,
+   and the timestamp was written unconditionally straight afterwards. So the app told people
+   "Last backup file saved: today" when nothing had been saved anywhere, against the one
+   promise everything else rests on: the backup file is the only copy that survives deleting
+   the app. A silent no-op is a bug; a silent no-op that reports success is a data-loss trap.
+
+   Two rules now. Write a real file FIRST — so a backup exists even if the share sheet is
+   dismissed — and set lastExportTs only once the write has actually resolved. */
+function backupName(){ return 'pokerlog-backup-' + todayISO() + '.json'; }
+function backupPayload(){ return JSON.stringify(Object.assign({}, db, {v: SCHEMA}), null, 2); }
+function markExported(){
+  db.prefs.lastExportTs = Date.now();
+  db.prefs.backupPrompted = true;          // they have one; stop asking
+  persist(); refreshDataPanel();
+}
+async function exportBackup(){
+  const P = (window.Capacitor && window.Capacitor.Plugins) || {};
+  const payload = backupPayload();
+  if (P.Filesystem){
+    let uri = null;
+    try {
+      const w = await P.Filesystem.writeFile({
+        path: backupName(), directory: 'DOCUMENTS', data: payload, encoding: 'utf8', recursive: true
+      });
+      uri = w && w.uri;
+    } catch(e){
+      return toast('Could not save the backup — ' + ((e && e.message) || 'unknown error'));
+    }
+    markExported();                        // only now: the file is genuinely on disk
+    toast('Saved to Files, under Poker Log');
+    // Sharing is a bonus on top. Cancelling it must not undo anything, because the file
+    // already exists — which is the whole reason the write comes first.
+    if (P.Share && uri){ try { await P.Share.share({title: 'Poker Log backup', url: uri}); } catch(e){} }
+    return;
+  }
+  // Web build: an anchor download genuinely works here.
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([payload], {type: 'application/json'}));
+  a.download = backupName();
+  a.click(); URL.revokeObjectURL(a.href);
+  markExported();
+}
+$('expJson').onclick = exportBackup;
+$('restoreBtn').onclick = () => {
+  let data;
+  try { data = JSON.parse($('restoreBox').value); }
+  catch(e){ return toast('invalid JSON'); }
+  restoreFrom(data);
+  $('restoreBox').value = '';
+};
+$('clearAll').onclick = () => {
+  ask('Erase everything?', 'Every hand, session and drill answer on this device. Save a backup first if you might want them back.', 'Erase everything', true)
+    .then(yes => {
+      if (!yes) return;
+      db = fresh(); persist(); renderAll(); refreshDataPanel(); toast('erased');
+    });
+};
+
+// The flagged-hand loop is the differentiator, so it gets a card even when it is empty —
+// an empty differentiator that explains itself beats one that is invisible until it works.
+function renderLeaksCard(){
+  const el = $('studyLeaks'); if (!el) return;
+  const n = db.hands.filter(h => h.flag || (h.review && !h.reviewed)).length;
+  el.hidden = false;
+  if (n){
+    el.style.borderColor = 'var(--gold)';
+    el.innerHTML = '<span class="tag">YOUR LEAKS</span>' +
+      '<div style="font-size:16px;margin-top:10px">' + n + (n === 1 ? ' flagged hand waiting' : ' flagged hands waiting') + '</div>' +
+      '<p class="mini" style="margin:4px 0 10px">They come back inside the drill below — you get asked whether you would play it the same way today, then shown what you actually did.</p>' +
+      '<button class="btn ghost" id="drillLeaks">Replay one now</button>';
+    $('drillLeaks').onclick = () => {
+      if (window.StudyUI && window.StudyUI.drillMyHands && window.StudyUI.drillMyHands()){
+        const d = $('studyDrill'); if (d && d.scrollIntoView) d.scrollIntoView({behavior: 'smooth', block: 'start'});
+      } else toast('nothing to replay yet');
+    };
+  } else {
+    el.style.borderColor = '';
+    el.innerHTML = '<span class="tag" style="border-color:var(--line);color:var(--dim)">YOUR LEAKS</span>' +
+      '<p class="mini" style="margin:10px 0 0">Nothing flagged yet. Tap <b>⚑</b> on a hand while logging it and it joins the rotation below — the app drills the spots you actually got wrong, not just generic ones. It is the part no tracker does.</p>';
+  }
+}
+
+/* ---------- what keeps catching you ----------
+   The payoff of logging every drill answer. Groups recent MISSES into a cluster and names it
+   in a sentence — but only claims a pattern when one actually exists: at least three misses
+   and a real share of them. Otherwise it says so, because inventing a leak out of four
+   scattered wrong answers is exactly the kind of flattering-but-useless output the honesty
+   rule in CLAUDE.md rules out. */
+const STREET_NAME = {pf: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River', hands: 'Full hands'};
+function missFamily(d){
+  const k = String(d.k || '');
+  const street = STREET_NAME[d.m] || d.m || 'Preflop';
+  // postflop keys look like "real:cb" / "hand:fcr"; preflop keys are "kind|seat|…"
+  const tail = k.indexOf(':') >= 0 ? k.split(':')[1] : k.split('|')[0];
+  const WHAT = {
+    cb: 'deciding whether to bet',
+    fcr: 'facing a bet',
+    open: 'first in',
+    vs: 'facing a raise',
+    vs3bet: 'facing a 3-bet',
+    vs4bet: 'facing a 4-bet',
+    cold3b: 'facing an open and a 3-bet',
+    squeeze: 'with callers in front',
+    calljam: 'facing a jam',
+    bbopt: 'in a limped pot',
+    limpRR: 'facing a limp-reraise',
+    iso: 'isolating a limper'
+  };
+  return {key: d.m + '|' + tail, label: street + ', ' + (WHAT[tail] || 'mixed spots')};
+}
+function missPattern(drills){
+  const wrong = gradedDrills(drills).slice(-150).filter(d => !drillRight(d));
+  if (wrong.length < 6) return null;
+  const by = {};
+  wrong.forEach(d => {
+    const f = missFamily(d);
+    (by[f.key] = by[f.key] || {n: 0, label: f.label}).n++;
+  });
+  const top = Object.keys(by).map(k => by[k]).sort((a, b) => b.n - a.n)[0];
+  if (!top || top.n < 3 || top.n / wrong.length < 0.25) return null;
+  return {label: top.label, n: top.n, of: wrong.length};
+}
+
+/* ---------- haptics ----------
+   Capture happens one-handed, at a table, half-watching. A tick on a tap chip confirms it
+   registered without looking — which is the whole argument for the shorthand being fast. */
+function tick(){
+  const P = (window.Capacitor && window.Capacitor.Plugins) || {};
+  if (P.Haptics && P.Haptics.impact){ try { P.Haptics.impact({style: 'Light'}); return; } catch(e){} }
+  if (navigator.vibrate){ try { navigator.vibrate(8); } catch(e){} }
+}
+
+/* ---------- swipe back ----------
+   Edge-originating only (within 24px of the left edge), so it cannot fire while someone is
+   scrolling a table or the Study mode row. Applies to the pushed windows, which are the only
+   screens with a "back" to go to — the four tabs are peers, not a sequence. */
+const BACK_TO = {History: 'Progress', Hand: 'History', Game: 'Progress', Data: 'Home'};
+function currentTab(){ return TABS.find(t => !$('tab-' + t.toLowerCase()).hidden) || 'Home'; }
+function goBack(){
+  const dest = BACK_TO[currentTab()];
+  if (dest) showTab(dest);
+  return !!dest;
+}
+(function wireSwipeBack(){
+  const EDGE = 24, DIST = 60;
+  let x0 = null, y0 = null, live = false;
+  document.addEventListener('touchstart', e => {
+    const t = e.touches && e.touches[0];
+    live = !!(t && t.clientX <= EDGE && BACK_TO[currentTab()]);
+    if (live){ x0 = t.clientX; y0 = t.clientY; }
+  }, {passive: true});
+  document.addEventListener('touchend', e => {
+    if (!live) return;
+    live = false;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - x0, dy = Math.abs(t.clientY - y0);
+    // Horizontal, rightward, and clearly more sideways than vertical — otherwise it was a scroll.
+    if (dx > DIST && dx > dy * 1.6) goBack();
+  }, {passive: true});
+})();
+
+/* ---------- ask ----------
+   Replaces confirm(). In a WKWebView the system dialog is titled with the app's host, which
+   makes an app look like a web page — and "Erase ALL hands" deserves better than a stock
+   alert. Returns a promise so call sites read the same as before. */
+let askResolve = null;
+function ask(title, body, yes, danger){
+  $('askTitle').textContent = title;
+  $('askBody').textContent = body || '';
+  $('askBody').hidden = !body;
+  $('askYes').textContent = yes || 'OK';
+  $('askYes').className = 'btn' + (danger ? ' danger' : '');
+  $('ask').hidden = false;
+  return new Promise(res => { askResolve = res; });
+}
+function closeAsk(v){ $('ask').hidden = true; if (askResolve){ askResolve(v); askResolve = null; } }
+$('askYes').onclick = () => closeAsk(true);
+$('askNo').onclick = () => closeAsk(false);
+$('ask').onclick = e => { if (e.target && e.target.id === 'ask') closeAsk(false); };
+
+/* ---------- about ----------
+   Version, what the app is, and the licence the bundled hand corpus is used under. The MIT
+   text has to travel with the data, so it ships in the app rather than only in a repo file.
+   The engine paragraph is deliberate: overclaiming "GTO" invites both refunds and a
+   comparison this loses, and being straight about it is a feature in a field that isn't. */
+const APP_VERSION = '0.9.0';
+// Flipped on when in-app purchase actually exists. A Restore button that restores nothing is
+// worse than no button — App Review requires the path to WORK, not merely to be present.
+const IAP_READY = false;
+function renderAbout(){
+  const v = $('appVersion'); if (v) v.textContent = 'version ' + APP_VERSION;
+  const pr = $('proRow'); if (pr) pr.hidden = !IAP_READY;
+}
+$('showCredits').onclick = () => {
+  const c = $('credits');
+  c.hidden = !c.hidden;
+  $('showCredits').textContent = c.hidden ? 'Acknowledgements' : 'Hide acknowledgements';
+};
+$('dataBack').onclick = () => showTab('Home');
+function paintCurrency(){
+  document.querySelectorAll('.curSym').forEach(e => { e.textContent = cur(); });
+}
+const segCur = seg('segCur', v => { db.prefs.cur = v; persist(); paintCurrency(); renderAll(); });
+segCur.set(db.prefs.cur || '$');
+paintCurrency();
+
+// Set when storage was evicted and the durable mirror put everything back. A distinct entry
+// state from a new user, and from a normal open: they need a count, not a welcome tour.
+let restoredNotice = null;
+
+/* ---------- home ----------
+   The hub. It answers "what is happening" and routes; it never asks you to read. During a
+   session the clock and Log a hand sit under the thumb, because that is the button pressed
+   fifteen times a night. */
+function monthRows(){
+  const now = new Date(), key = now.getFullYear() + '-' + pad(now.getMonth() + 1);
+  return resultRows().filter(r => (r.date || '').slice(0, 7) === key);
+}
+function renderHome(){
+  const s = db.activeSession;
+  const box = $('homeSession');
+  const rn = $('homeRestored');
+  if (rn){
+    rn.hidden = !restoredNotice;
+    if (restoredNotice){
+      rn.innerHTML = '<div class="k">Everything is here</div>' +
+        '<p class="prognote" style="margin:8px 0 10px">This phone cleared the app’s working copy, so it was ' +
+        'restored from the backup on this device: <b>' + restoredNotice.hands + ' hands</b>, ' +
+        restoredNotice.results + ' results and ' + restoredNotice.drills + ' drill answers. Nothing was lost.</p>' +
+        '<button class="btn ghost" id="restoredOk">Got it</button>';
+      $('restoredOk').onclick = () => { restoredNotice = null; renderHome(); };
+    }
+  }
+  if (s){
+    const n = db.hands.filter(h => h.sessionId === s.id).length;
+    box.innerHTML = '<div class="homecard live">' +
+      '<div class="s" style="color:var(--green)">● Session running · ' + esc(s.stakes) + (s.venue ? ' ' + esc(s.venue) : '') + '</div>' +
+      '<div class="clock" id="homeClock">' + sessElapsed(s) + '</div>' +
+      '<div class="s" style="margin-bottom:14px">' + n + (n === 1 ? ' hand' : ' hands') + ' logged</div>' +
+      '<div class="row"><button class="btn" id="homeLogHand" style="flex:1">Log a hand</button>' +
+      '<button class="btn ghost" id="homeEnd" style="flex:0 0 34%">End</button></div></div>';
+    $('homeLogHand').onclick = () => showTab('Log');
+    $('homeEnd').onclick = endSession;
+    startClock();
+  } else {
+    box.innerHTML = '<div class="homecard">' +
+      '<div class="k" style="text-align:left;margin-bottom:10px">Start playing</div>' +
+      '<button class="btn" id="homeStart">Start a session</button>' +
+      '<div class="s" style="margin-top:10px">Times the night and links every hand you log to it</div></div>';
+    // Take them to the setup and put the cursor in it — never start on their behalf.
+    // No programmatic focus: showTab already scrolls to top, and focusing 60ms later made
+    // iOS scroll a second time — two competing animations for one tap.
+    $('homeStart').onclick = () => showTab('Log');
+  }
+  const rows = monthRows();
+  const net = rows.reduce((a, r) => a + r.net, 0);
+  const cashRows = rows.filter(r => r.kind === 'cash');
+  const hrs = cashRows.reduce((a, r) => a + r.hours, 0);
+  const cashNet = cashRows.reduce((a, r) => a + r.net, 0);
+  const drills = db.drills || [];
+  const last = gradedDrills(drills).slice(-50);
+  const acc = last.length ? Math.round(last.filter(drillRight).length / last.length * 100) : null;
+  const nothingYet = !db.hands.length && !rows.length && !drills.length;
+  if (nothingYet){
+    $('homeTiles').innerHTML = '';
+    $('homeRoutes').innerHTML =
+      '<div class="panel"><h3>Nothing logged yet</h3>' +
+      '<p class="prognote">Two things fill this screen. <b>Log the hands that mattered</b> — the five to fifteen a session ' +
+      'worth thinking about later — and they turn into patterns you can drill. <b>Start a session</b> and the clock ' +
+      'handles your hours, so the hourly rate is never something you type.</p>' +
+      '<div class="emptycta"><button data-go="Log">Log your first hand</button> ' +
+      '<button data-go="Study">Try a drill</button></div>' +
+      '<p class="mini" style="margin:12px 0 0">Or <button class="linkish" id="homeSample">fill it with sample data</button> to see what it looks like with a few sessions in it.</p></div>';
+    $('homeSample').onclick = () => { loadSamples(); showTab('Home'); };
+    return;
+  }
+  $('homeTiles').innerHTML =
+    '<button class="tile" data-go="Progress"><div class="k">This month</div><div class="v ' + (rows.length ? netClass(net) : 'dim') + '">' +
+      (rows.length ? money(net) : '—') + '</div><div class="s">' +
+      (rows.length ? rows.length + (rows.length === 1 ? ' session' : ' sessions') +
+        (hrs ? ' · ' + money(cashNet / hrs) + '/h cash' : '') : 'nothing logged yet') + '</div></button>' +
+    '<button class="tile" data-go="Game"><div class="k">Drills</div><div class="v">' + (acc != null ? acc + '%' : '—') + '</div>' +
+      '<div class="s">' + (acc != null ? 'last ' + last.length + ' spots' : 'none answered yet') + '</div></button>';
+  $('homeTiles').onclick = e => {
+    const b = e.target.closest && e.target.closest('[data-go]');
+    if (b) showTab(b.dataset.go);
+  };
+  const flagged = db.hands.filter(h => h.flag || (h.review && !h.reviewed)).length;
+  $('homeRoutes').innerHTML =
+    (flagged ? route('Study', '⚑', flagged + (flagged === 1 ? ' hand to review' : ' hands to review'), 'Replay them in Study') : '') +
+    route('Study', '♣', 'Study', 'Drill spots and your leaks') +
+    route('History', '▤', 'Hand history', db.hands.length + (db.hands.length === 1 ? ' hand logged' : ' hands logged')) +
+    route('Progress', '◗', 'Progress', 'Where you actually win');
+}
+// Delegated rather than per-row ids: an id built by concatenation exists at runtime but not
+// in the source, which is exactly the case the markup guard cannot verify.
+function route(dest, ic, title, sub){
+  return '<button class="big" data-go="' + dest + '" style="width:100%;text-align:left">' +
+    '<span class="ic">' + ic + '</span><span><b>' + esc(title) + '</b><i>' + esc(sub) + '</i></span>' +
+    '<span class="ch">›</span></button>';
+}
+$('homeRoutes').onclick = e => {
+  const b = e.target.closest && e.target.closest('[data-go]');
+  if (b) showTab(b.dataset.go);
+};
+// A running session follows you onto every tab — except Home, where the card already is the
+// clock. Without this you can drill between hands and quietly lose track of the session.
+function renderLiveBar(){
+  const s = db.activeSession, bar = $('liveBar');
+  const onHome = !$('tab-home').hidden;
+  if (!s || onHome){ bar.hidden = true; return; }
+  const n = db.hands.filter(h => h.sessionId === s.id).length;
+  bar.innerHTML = '<span class="dot">●</span><span class="cl" id="barClock">' + sessElapsed(s) + '</span>' +
+    '<span class="s">' + esc(s.stakes) + ' · ' + n + (n === 1 ? ' hand' : ' hands') + '</span><span class="ch">›</span>';
+  bar.hidden = false;
+  bar.onclick = () => showTab('Home');
+  startClock();
+}
+
+/* ---------- hand detail ----------
+   A pushed window rather than an inline expander: flag and review are the entry point to the
+   whole flagged-hand loop, and the shorthand deserves to be read as a hand. */
+let detailId = null;
+function openHandDetail(id){ detailId = id; showTab('Hand'); }
+function renderHandDetail(){
+  const box = $('handDetail'); if (!box) return;
+  const h = db.hands.find(x => x.id === detailId);
+  if (!h){ box.innerHTML = '<div class="panel"><p class="mini">That hand is gone.</p></div>'; return; }
+  const when = [shortDate(dateOf(h.ts)), h.stakes, h.venue, (h.pos || '').toUpperCase()].filter(Boolean).join(' · ');
+  const net = handNetStr(h);
+  box.innerHTML =
+    '<div class="panel" style="text-align:center">' +
+      '<div class="s">' + esc(when) + '</div>' +
+      (h.c1 && h.c2 ? '<div style="margin:12px 0;font-size:clamp(30px,10vw,40px);letter-spacing:3px">' +
+        cardHtml(h.c1) + cardHtml(h.c2) + '</div>' : '<div class="gap"></div>') +
+      (net ? '<div class="v ' + (h.sign === '-' ? 'neg-net' : 'pos-net') + '" style="font-size:26px">' + esc(net) + '</div>' : '') +
+    '</div>' +
+    (h.action ? '<div class="panel"><div class="k" style="margin-bottom:8px">How it went</div>' +
+      '<div class="ta">' + esc(h.action) + '</div>' +
+      (h.note ? '<p class="prognote" style="margin:12px 0 0;color:var(--text)">“' + esc(h.note) + '”</p>' : '') +
+      '</div>' : '') +
+    '<div class="panel"><div class="k" style="margin-bottom:11px">Review</div>' +
+      '<div class="row" style="margin-bottom:9px">' +
+        '<button class="btn ghost" id="dFlag" style="flex:1' + (h.flag ? ';border-color:var(--gold);color:var(--gold)' : '') + '">' +
+          (h.flag ? '⚑ Flagged' : 'Flag for review') + '</button>' +
+        '<button class="btn ghost" id="dReviewed" style="flex:1' + (h.reviewed ? ';border-color:var(--green);color:var(--green)' : '') + '">' +
+          (h.reviewed ? 'Reviewed ✓' : 'Mark reviewed') + '</button>' +
+      '</div>' +
+      '<p class="mini" style="margin:0">Flagged hands come back to you inside the drill rotation.</p></div>' +
+    '<div class="row"><button class="btn ghost" id="dEdit" style="flex:1">Edit</button>' +
+      '<button class="btn ghost" id="dDel" style="flex:1;color:var(--red);border-color:#4a2020">Delete</button></div>';
+  $('dFlag').onclick = () => { h.flag = !h.flag; h.up = Date.now(); save(); renderHandDetail(); renderHands(); renderHome(); };
+  $('dReviewed').onclick = () => { h.reviewed = !h.reviewed; if (h.reviewed) h.flag = false; h.up = Date.now(); save(); renderHandDetail(); renderHands(); renderHome(); };
+  $('dEdit').onclick = () => { showTab('Log'); editHand(h.id); };
+  $('dDel').onclick = () => ask('Delete this hand?', 'This cannot be undone.', 'Delete', true)
+    .then(yes => { if (yes){ deleteHand(h.id); showTab('History'); } });
+}
+
+/* ---------- history: two views of the same records ---------- */
+const segHist = seg('segHist', () => renderHist());
+function renderHist(){
+  const v = segHist.get();
+  $('histHands').hidden = v !== 'hands';
+  $('histResults').hidden = v !== 'results';
+  if (v === 'results') renderLog(); else renderHands();
+}
+$('addResult').onclick = () => {
+  $('resultPanel').hidden = false;
+  showTab('Log');
+  $('resultPanel').scrollIntoView({behavior: 'smooth', block: 'start'});
+};
+
+/* ---------- progress ----------
+   The competitor lesson: the value is not the curve, it's the SPLITS — which stakes, which
+   room, which day is actually paying. A curve tells you how it went; a split tells you what
+   to do next Tuesday. Hours come from sessions, so the hourly figures are only as honest as
+   the session log — that is said on screen rather than quietly assumed. */
+function resultRows(){
+  // One shape for cash and tournaments so every split can treat them alike.
+  const rows = [];
+  db.sessions.forEach(r => rows.push({
+    kind: 'cash', date: r.date, venue: r.venue || '—', label: r.stakes || '—',
+    net: num(r.cashout) - num(r.buyin), hours: num(r.hours), cashed: num(r.cashout) > 0
+  }));
+  db.tourneys.forEach(r => {
+    const invested = num(r.buyin) * Math.max(num(r.entries), 1);
+    rows.push({
+      kind: 'mtt', date: r.date, venue: r.venue || '—', label: r.event || '—',
+      net: num(r.cash) + num(r.bounty) - invested,
+      hours: num(r.hours), cashed: num(r.cash) > 0, invested: invested
+    });
+  });
+  return rows.filter(r => r.date).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+function cur(){ return (db.prefs && db.prefs.cur) || '$'; }
+function money(n){
+  const v = Math.round(n * 100) / 100;
+  return (v < 0 ? '−' : '') + cur() + Math.abs(v).toLocaleString(undefined, {maximumFractionDigits: 2});
+}
+function netClass(n){ return n < 0 ? 'neg-net' : 'pos-net'; }
+function bankrollCurve(rows){
+  if (rows.length < 2) return '';
+  let run = 0;
+  const pts = rows.map(r => (run += r.net));
+  const lo = Math.min(0, ...pts), hi = Math.max(0, ...pts);
+  const span = (hi - lo) || 1;
+  const W = 100, H = 40;                      // viewBox units; CSS controls the real size
+  const x = i => (i / (pts.length - 1)) * W;
+  const y = v => H - ((v - lo) / span) * H;
+  const line = pts.map((v, i) => (i ? 'L' : 'M') + x(i).toFixed(2) + ' ' + y(v).toFixed(2)).join(' ');
+  const area = line + ' L' + W + ' ' + y(lo).toFixed(2) + ' L0 ' + y(lo).toFixed(2) + ' Z';
+  const end = pts[pts.length - 1];
+  const col = end < 0 ? 'var(--red)' : 'var(--green)';
+  return '<svg class="curve" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-label="Bankroll over time">' +
+    (lo < 0 && hi > 0 ? '<line class="zero" x1="0" x2="' + W + '" y1="' + y(0).toFixed(2) + '" y2="' + y(0).toFixed(2) + '"/>' : '') +
+    '<path d="' + area + '" fill="' + col + '" opacity=".12"/>' +
+    '<path d="' + line + '" fill="none" stroke="' + col + '" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>' +
+    '</svg>';
+}
+function splitBlock(title, rows, keyFn, note, pct){
+  const by = {};
+  rows.forEach(r => {
+    const k = keyFn(r) || '—';
+    const g = by[k] || (by[k] = {net: 0, hours: 0, n: 0, cashNet: 0, mixed: false});
+    g.net += r.net; g.n++;
+    // Hours only exist on cash sessions. Dividing a group's TOTAL net by cash-only hours
+    // reports a venue as several times more profitable per hour than it is — and "by room"
+    // is exactly where cash and tournaments mix. So the rate is computed from cash alone,
+    // and says so; the net above it still counts everything.
+    if (r.kind === 'cash'){ g.hours += r.hours; g.cashNet += r.net; }
+    else g.mixed = true;
+  });
+  const keys = Object.keys(by).sort((a, b) => by[b].net - by[a].net);
+  if (!keys.length) return '';
+  const peak = Math.max.apply(null, keys.map(k => Math.abs(by[k].net))) || 1;
+  return '<div class="panel"><h3>' + title + '</h3>' +
+    keys.map(k => {
+      const g = by[k];
+      const w = (Math.abs(g.net) / peak) * 100;
+      const col = pct ? 'var(--gold)' : g.net < 0 ? 'var(--red)' : 'var(--green)';
+      const amt = pct ? g.net + '%' : money(g.net);
+      const sub = pct ? g.n + ' spot' + (g.n === 1 ? '' : 's')
+        : g.hours ? money(g.cashNet / g.hours) + '/h' + (g.mixed ? ' cash' : '')
+        : g.n + (g.n === 1 ? ' entry' : ' entries');
+      return '<div class="split"><span class="nm">' + esc(k) + '</span>' +
+        '<span class="bar"><i style="width:' + w.toFixed(1) + '%; background:' + col + '"></i></span>' +
+        '<span class="amt"><b class="' + (pct ? '' : netClass(g.net)) + '">' + esc(amt) + '</b>' +
+        '<br><span class="sub">' + esc(sub) + '</span></span></div>';
+    }).join('') +
+    (note ? '<p class="mini" style="margin:10px 0 0">' + note + '</p>' : '') + '</div>';
+}
+const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function dowOf(iso){
+  const p = (iso || '').split('-');
+  if (p.length !== 3) return '';
+  return DOW[new Date(+p[0], +p[1] - 1, +p[2]).getDay()];
+}
+function renderProgress(){
+  const box = $('progMoney');
+  if (!box) return;
+  const scope = progScope();
+  const all = resultRows();
+  const rows = scope === 'cash' ? all.filter(r => r.kind === 'cash')
+    : scope === 'mtt' ? all.filter(r => r.kind === 'mtt') : all;
+  if (!all.length){
+    box.innerHTML = '<div class="panel"><h3>Nothing to report yet</h3>' +
+      '<p class="prognote">Log a session or a tournament and this fills in: how the bankroll is moving, ' +
+      'and which stakes, rooms and days are actually paying. That last part is the one worth having — ' +
+      'a curve tells you how it went, a split tells you where to play next.</p>' +
+      '<div class="emptycta"><button id="progSample">Show me with sample data</button></div></div>';
+    $('progSample').onclick = () => { loadSamples(); showTab('Progress'); };
+    return;
+  }
+  if (!rows.length){
+    box.innerHTML = '<div class="panel"><p class="prognote">Nothing logged in this category yet.</p></div>' + progWindows();
+    wireProgWindows();
+    return;
+  }
+  const net = rows.reduce((a, r) => a + r.net, 0);
+  const hours = rows.reduce((a, r) => a + r.hours, 0);
+  const cash = rows.filter(r => r.kind === 'cash');
+  const mtt = rows.filter(r => r.kind === 'mtt');
+  const winners = rows.filter(r => r.net > 0).length;
+  // Tournament records carry no clock, so an hourly rate there would be invented. ROI and
+  // in-the-money are what a tournament player actually judges by, and they are honest.
+  const isMtt = scope === 'mtt';
+  const invested = mtt.reduce((a, r) => a + (r.invested || 0), 0);
+  const cashed = rows.filter(r => r.cashed).length;
+  const cashHours = cash.reduce((a, r) => a + r.hours, 0);
+  const cashNet = cash.reduce((a, r) => a + r.net, 0);
+  box.innerHTML =
+    '<div class="panel">' +
+      '<div class="tiles">' +
+        '<div class="tile"><div class="k">Net</div><div class="v ' + netClass(net) + '">' + money(net) + '</div>' +
+          '<div class="s">' + rows.length + (rows.length === 1 ? ' entry' : ' entries') + '</div></div>' +
+        (isMtt
+          ? '<div class="tile"><div class="k">ROI</div><div class="v ' + netClass(net) + '">' +
+            (invested ? (net / invested * 100).toFixed(0) + '%' : '—') + '</div>' +
+            '<div class="s">' + money(invested) + ' in buy-ins</div></div>'
+          : '<div class="tile"><div class="k">Per hour</div><div class="v ' + (cashHours ? netClass(cashNet) : 'dim') + '">' +
+            (cashHours ? money(cashNet / cashHours) : '—') + '</div>' +
+            '<div class="s">' + (cashHours ? (scope === 'all' ? 'cash only · ' : '') + cashHours.toFixed(1) + ' hours' : 'add hours to sessions') + '</div></div>') +
+        (isMtt
+          ? '<div class="tile"><div class="k">In the money</div><div class="v">' + Math.round(cashed / rows.length * 100) + '%</div>' +
+            '<div class="s">' + cashed + ' of ' + rows.length + ' cashed</div></div>'
+          : '<div class="tile"><div class="k">Winning</div><div class="v">' + Math.round(winners / rows.length * 100) + '%</div>' +
+            '<div class="s">' + winners + ' of ' + rows.length + '</div></div>') +
+        '<div class="tile"><div class="k">Hands kept</div><div class="v">' + db.hands.length + '</div>' +
+          '<div class="s">' + db.hands.filter(h => h.flag).length + ' flagged</div></div>' +
+      '</div>' +
+      bankrollCurve(rows) +
+      '<p class="mini" style="margin:8px 0 0">Running bankroll, oldest to newest.</p>' +
+    '</div>' +
+    (isMtt
+      ? splitBlock('By event', mtt, r => r.label,
+          'No hourly rate here — tournament records have no clock, so an hourly figure would be invented.')
+      : splitBlock('By stakes', cash.length ? cash : rows, r => r.label)) +
+    splitBlock('By room', rows, r => r.venue) +
+    splitBlock('By day', rows, r => dowOf(r.date),
+      cashHours ? '' : 'Add hours when you log a session and these become hourly rates.') +
+    progWindows();
+  wireProgWindows();
+}
+function progWindows(){
+  const flagged = db.hands.filter(h => h.flag).length;
+  const drills = (db.drills || []).length;
+  return '<button class="big" id="openHist" style="width:100%;text-align:left">' +
+      '<span class="ic">▤</span><span><b>History</b><i>' + db.hands.length + ' hands · ' +
+      (db.sessions.length + db.tourneys.length) + ' results' + (flagged ? ' · ' + flagged + ' flagged' : '') +
+      '</i></span><span class="ch">›</span></button>' +
+    '<button class="big" id="openGame" style="width:100%;text-align:left">' +
+      '<span class="ic">◷</span><span><b>Your game</b><i>' +
+      (drills ? drills + ' spots answered' : 'drill accuracy and what keeps catching you') +
+      '</i></span><span class="ch">›</span></button>';
+}
+function wireProgWindows(){
+  if ($('openHist')) $('openHist').onclick = () => showTab('History');
+  if ($('openGame')) $('openGame').onclick = () => showTab('Game');
+}
+const segProg = seg('segProg', () => renderProgress());
+function progScope(){ return segProg.get() || 'all'; }
+// "Your game" — skill progression, the half of progress a bankroll tracker cannot show.
+// Reads the drill log the Study tab already writes on every answer.
+function drillRight(d){ return d.r === 1 || d.r === true || d.r === 'right'; }
+// Replaying your own hand is a review, not a graded spot: "same line" is not correct and
+// "differently" is not wrong. Counting them would let a hand full of freeform nonsense drag
+// down an accuracy number that is supposed to mean something.
+function gradedDrills(list){ return (list || []).filter(d => !d.review && d.m !== 'mine'); }
+function leakSentence(){
+  const p = missPattern(db.drills || []);
+  if (!p){
+    return '<div class="panel"><div class="k">What keeps catching you</div>' +
+      '<p class="prognote" style="margin:8px 0 0">Not enough of a pattern yet. Once your misses cluster, ' +
+      'the spot they cluster in gets named here.</p></div>';
+  }
+  return '<div class="panel"><div class="k">What keeps catching you</div>' +
+    '<p class="prognote" style="margin:8px 0 4px;color:var(--text)"><b>' + esc(p.label) + '</b> — ' +
+    p.n + ' of your last ' + p.of + ' misses.</p></div>';
+}
+function renderGameProgress(){
+  const box = $('progGame');
+  const drills = db.drills || [];
+  if (gradedDrills(drills).length < 5){
+    box.innerHTML = '<div class="panel"><h3>Not enough drills yet</h3>' +
+      '<p class="prognote">Answer a few spots in Study and this tracks whether you are actually getting better — ' +
+      'accuracy by street, and which spots keep catching you out.</p>' +
+      '<div class="emptycta"><button id="goStudy">Go to Study</button></div></div>';
+    $('goStudy').onclick = () => showTab('Study');
+    return;
+  }
+  const NAMES = {pf: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River', hands: 'Full hands', mine: 'Your hands'};
+  const graded = gradedDrills(drills);
+  const byMode = {};
+  graded.forEach(d => {
+    const m = d.m || 'pf';
+    const g = byMode[m] || (byMode[m] = {n: 0, right: 0});
+    g.n++; if (drillRight(d)) g.right++;
+  });
+  const recent = graded.slice(-50), older = graded.slice(-150, -50);
+  const acc = list => list.length ? Math.round(list.filter(drillRight).length / list.length * 100) : null;
+  const rNow = acc(recent), rWas = acc(older);
+  const trend = (rNow != null && rWas != null)
+    ? (rNow > rWas ? '<b class="pos-net">up ' + (rNow - rWas) + ' pts</b> on the 100 before'
+      : rNow < rWas ? '<b class="neg-net">down ' + (rWas - rNow) + ' pts</b> on the 100 before'
+      : 'level with the 100 before')
+    : 'keep drilling for a trend';
+  box.innerHTML = '<div class="panel">' +
+    '<div class="tiles">' +
+      '<div class="tile"><div class="k">Last 50 spots</div><div class="v">' + (rNow != null ? rNow + '%' : '—') + '</div>' +
+        '<div class="s">' + trend + '</div></div>' +
+      '<div class="tile"><div class="k">Answered</div><div class="v">' + drills.length + '</div>' +
+        '<div class="s">all time</div></div>' +
+    '</div></div>' +
+    splitBlock('Accuracy by street', Object.keys(byMode).map(m => ({
+      label: NAMES[m] || m, net: Math.round(byMode[m].right / byMode[m].n * 100),
+      hours: 0, venue: '', date: '', kind: 'drill'
+    })), r => r.label, 'Percent correct — bars compare accuracy across streets, not money.', true) +
+    leakSentence() +
+    '<div class="panel"><p class="prognote">Spots you get wrong come back around in Study automatically, ' +
+    'and hands you flag ⚑ get replayed to you there too.</p></div>';
+}
+
+/* ---------- first run ----------
+   A stranger opens this app onto a shorthand entry form. The whole pitch is "log a hand in
+   ten seconds", and nothing on screen teaches the notation that makes that true — the ?
+   notation table is one tap away but only if you know to look. These three cards are the
+   fix, and they are re-openable from Data so they're never a one-shot. */
+const SLIDES = [
+  {
+    h: 'Log the hands that mattered',
+    body: '<p>Not every hand — the five to fifteen a session you would actually want to think about later.</p>' +
+      '<p>Each one takes about <b>ten seconds</b> at the table: tap your position, tap two cards, type the action.</p>' +
+      '<p>Start a session first and the clock runs in the background, so your hours are never something you have to remember or type.</p>'
+  },
+  {
+    h: 'One line of shorthand',
+    body: '<p>The action box takes tokens in the order things happened. Tap the chips above it, or just type.</p>' +
+      '<div class="introex"><code>open15 btn3b45 c / (Ks7d2c) x b25 c</code>' +
+      '<div class="arrow">reads as</div>' +
+      '<div class="plain">You open to 15 · the button 3-bets to 45 · you call · flop comes K♠7♦2♣ · you check, they bet 25, you call</div></div>' +
+      '<p>Nothing is required. A lazy <b>KK &lt; AA, std | -250</b> is a perfectly good entry — you can always add more later.</p>'
+  },
+  {
+    h: 'Then drill what you got wrong',
+    body: '<p>Study gives you solver-backed spots — preflop, flop, turn, river — and full hands to play through.</p>' +
+      '<p>The part no tracker does: <b>the hands you flag come back around</b> inside that rotation. ' +
+      'You get asked whether you would play it the same way today, then shown what you actually did and the note you wrote at the table.</p>' +
+      '<p>Trackers stop at statistics. Trainers drill hands you never played. This does both ends.</p>'
+  },
+  {
+    h: 'See what is actually paying',
+    body: '<p>Progress does more than draw a bankroll line. It splits your results by <b>stakes, room and day</b> — ' +
+      'so the question stops being "how am I running" and becomes "where should I sit on Thursday".</p>' +
+      '<p>Tournaments are judged on ROI and how often you cash, because a tournament has no clock — an hourly rate there would be invented.</p>' +
+      '<p>It tracks the other half too: whether your drill accuracy is going up.</p>'
+  },
+  {
+    h: 'It never leaves your phone',
+    body: '<p>No account, no server, no subscription. It works in airplane mode, in a basement card room, on a plane.</p>' +
+      '<p>That also means <b>you</b> hold the only copy. Save a backup file from <b>⚙ Settings</b> now and then — it is the one thing that survives deleting the app.</p>'
+  }
+];
+let slideIx = 0;
+function renderIntro(){
+  const s = SLIDES[slideIx];
+  $('introBody').innerHTML = '<h2>' + s.h + '</h2>' + s.body +
+    (slideIx === SLIDES.length - 1
+      ? '<div class="emptycta"><button id="introSample">Fill it with sample hands first</button></div>'
+      : '');
+  $('introDots').innerHTML = SLIDES.map((_, i) => '<i class="' + (i === slideIx ? 'on' : '') + '"></i>').join('');
+  $('introNext').textContent = slideIx === SLIDES.length - 1 ? 'Start logging' : 'Next';
+  $('introSkip').hidden = slideIx === SLIDES.length - 1;
+  if (slideIx === SLIDES.length - 1){
+    // Close first: the toast lives below the overlay, so loading before closing hides it.
+    $('introSample').onclick = () => { closeIntro(); loadSamples(); showTab('Progress'); };
+  }
+}
+function showIntro(){ slideIx = 0; renderIntro(); $('intro').hidden = false; }
+function closeIntro(){
+  $('intro').hidden = true;
+  db.prefs.onboarded = true; persist();
+}
+$('introNext').onclick = () => {
+  if (slideIx < SLIDES.length - 1){ slideIx++; renderIntro(); $('introBody').scrollTop = 0; }
+  else closeIntro();
+};
+$('introSkip').onclick = closeIntro;
+
+/* ---------- sample data ----------
+   Study and the results screens are dead rectangles on day one, and screenshots of an empty
+   app sell nothing. These are flagged `sample:true` so "Remove sample data" is exact and
+   can never take a real hand with it. */
+function sampleData(){
+  const day = 86400000, now = Date.now();
+  const H = (ago, pos, c1, c2, action, sign, amount, note, flag) => ({
+    id: 'sample-' + ago + '-' + pos, ts: now - ago * day + 3600000, up: now,
+    game: 'cash', stakes: '1/3', venue: 'Card room', pos: pos, c1: c1, c2: c2, eff: '300',
+    action: action, sign: sign, amount: amount, note: note || '', flag: !!flag,
+    sessionId: null, sample: true
+  });
+  return {
+    hands: [
+      H(1, 'BTN', 'Ah', 'Kd', 'open15 bb3b45 c / (Ks7d2c) x b25 c / (4h) x x / (9s) x b60 c', '+', '150', 'top pair top kicker held up'),
+      H(1, 'CO', 'Td', '9d', 'open12 btn c bb c / (8d5c2d) x b20 c c / (Qd) b65 f f', '+', '95', 'flopped the flush draw, got there'),
+      H(2, 'SB', 'Qc', 'Qh', 'open15 btn3b45 4b120 c / (Ah8s3c) x b90 f', '-', '120', 'ace on the flop, gave up too fast', true),
+      H(2, 'BB', '7s', '7h', 'utg open15 c / (7c4d2s) x b25 r80 c / (Jh) b120 c / (2c) jam c', '+', '580', 'set over overpair'),
+      H(3, 'HJ', 'Ac', 'Js', 'open15 co c btn c / (Jd9c4h) b30 c f / (3s) x x / (Kd) x b70 f', '-', '45', 'K river killed it — should have bet turn', true),
+      H(4, 'BTN', '5h', '5c', 'utg open15 c / (Ks9h5d) x b30 c / (2c) b85 c / (7d) b210 c', '+', '640', 'bottom set, three streets'),
+      H(5, 'BB', 'Kh', 'Qs', 'btn open12 c / (Qd7s3h) x b18 c / (8c) x x / (2d) b45 f', '+', '75', ''),
+      H(6, 'CO', 'As', 'Ad', 'open15 sb3b50 4b135 c / (7h6h5s) b110 jam f', '+', '325', 'wet board, jammed over the check-raise', true)
+    ],
+    tourneys: [
+      { id: 'sample-t1', date: dateOf(now - 8 * day), venue: 'Card room', event: '$150 NLH bounty',
+        buyin: '150', entries: '2', field: '180', place: '14', cash: '0', bounty: '150',
+        notes: 'ran it into aces twice', ts: now - 8 * day, up: now, sample: true },
+      { id: 'sample-t2', date: dateOf(now - 21 * day), venue: 'Card room', event: '$250 NLH deepstack',
+        buyin: '250', entries: '1', field: '96', place: '3', cash: '1450', bounty: '0',
+        notes: 'good structure, played it well', ts: now - 21 * day, up: now, sample: true }
+    ],
+    sessions: [
+      { id: 'sample-s1', date: dateOf(now - 1 * day), venue: 'Card room', stakes: '1/3', hours: '6',
+        buyin: '300', cashout: '785', notes: '', ts: now - 1 * day, up: now, sample: true },
+      { id: 'sample-s2', date: dateOf(now - 3 * day), venue: 'Card room', stakes: '1/3', hours: '4.5',
+        buyin: '300', cashout: '190', notes: 'card dead', ts: now - 3 * day, up: now, sample: true }
+    ]
+  };
+}
+function hasSamples(){
+  return db.hands.some(h => h.sample) || db.tourneys.some(r => r.sample) || db.sessions.some(r => r.sample);
+}
+function loadSamples(){
+  if (hasSamples()) return toast('sample data is already loaded');
+  const s = sampleData();
+  db.hands = s.hands.concat(db.hands);
+  db.tourneys = s.tourneys.concat(db.tourneys);
+  db.sessions = s.sessions.concat(db.sessions);
+  save(); renderAll(); refreshDataPanel();
+  toast('sample data added');
+}
+function removeSamples(){
+  db.hands = db.hands.filter(h => !h.sample);
+  db.tourneys = db.tourneys.filter(r => !r.sample);
+  db.sessions = db.sessions.filter(r => !r.sample);
+  save(); renderAll(); refreshDataPanel();
+  toast('sample data removed');
+}
+$('sampleBtn').onclick = () => { hasSamples() ? removeSamples() : loadSamples(); };
+$('introAgain').onclick = showIntro;
+
+/* ---------- boot ---------- */
+function updateCount(){
+  const n = db.hands.length;
+  $('count').textContent = n + (n === 1 ? ' hand' : ' hands');
+}
+function renderAll(){ renderSlots(); renderHands(); renderLog(); renderSession(); updateCount(); renderProgress(); renderHome(); renderLiveBar(); }
+renderAll();
+showTab(tabFromHash() || 'Home');
+if (!db.prefs.onboarded) showIntro();
+// A session forgotten overnight silently wrecks the hourly rate on every split it feeds.
+const STALE_H = 18;
+function checkStaleSession(){
+  const s = db.activeSession;
+  if (!s || (Date.now() - s.startTs) / 3600000 < STALE_H) return false;
+  const hrs = Math.round((Date.now() - s.startTs) / 3600000);
+  ask('Still playing?', 'A session has been running for ' + hrs + ' hours. Ending it now stops it skewing your hourly rate.', 'Still playing')
+    .then(yes => { if (!yes) endSession(); });
+  return true;
+}
+checkStaleSession();
+// If the system evicted the working copy, the durable mirror still has it. That read
+// is async, so we boot on whatever survived and re-render if recovery finds more.
+Store.onRecover(() => {
+  try { db = migrate(Object.assign(fresh(), JSON.parse(Store.get(LS) || '{}'))); }
+  catch(e){ return; }
+  db.prefs = Object.assign(fresh().prefs, db.prefs || {});
+  // Someone being restored is NOT a new user. The first-run decision above ran before this
+  // async restore resolved, so without this an evicted user is welcomed to an app they
+  // already own — at the exact moment they are working out whether it just ate their data.
+  // Hide it directly rather than via closeIntro(): they were already onboarded, and there
+  // is nothing new to record.
+  if (db.prefs.onboarded) $('intro').hidden = true;
+  restoredNotice = {
+    hands: db.hands.length,
+    results: db.sessions.length + db.tourneys.length,
+    drills: (db.drills || []).length
+  };
+  showTab('Home');
+  renderAll(); refreshDataPanel();
+});
+Store.recover([LS]);
+// Never leave a save stranded in the debounce window when the app goes away.
+document.addEventListener('visibilitychange', () => { if (document.hidden) Store.flush(); });
+window.addEventListener('pagehide', () => Store.flush());
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')){
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+if (window.Poker && window.POKER_DATA) Poker.init(window.POKER_DATA);
+</script>
+<script src="study.js"></script>
+</body>
+</html>
