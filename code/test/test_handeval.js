@@ -2,6 +2,7 @@
 const path = require('path');
 global.window = global;
 require(path.join(__dirname, '..', 'www', 'charts.js'));
+require(path.join(__dirname, '..', 'www', 'tables.js'));
 require(path.join(__dirname, '..', 'www', 'poker.js'));
 const H = require(path.join(__dirname, '..', 'www', 'handeval.js'));
 window.Poker.init(window.POKER_DATA);
@@ -76,6 +77,25 @@ console.log('multiway equity vs the FIELD (must beat ALL — David’s c-bet ask
   ok(set > 85, 'a set still crushes 3-way (' + set.toFixed(0) + '%)');
   const one = H.equityVsField(['As', 'Kh'], ['Qd', '7c', '2s'], [pool], { n: 6000 }) * 100;
   ok(Math.abs(one - hu) < 4, 'field of 1 ≈ equityVsRange (' + one.toFixed(0) + ' vs ' + hu.toFixed(0) + ')');
+})();
+
+console.log('eval7 accepts 5 and 6 cards — real flop/turn spots evaluate hero+board directly');
+(function () {
+  // A hard-coded 7-loop read rankOf(undefined)=2, suitOf(undefined)=spades: AsKs on a
+  // 3-card board scored two phantom 2♠ and became a "flush".
+  ok(H.eval7(ids(['As','Ks','2s','7h','9d']))[0] === 0, 'AsKs on 2s7h9d (5 cards) is ace-high, not a phantom flush');
+  ok(H.eval7(ids(['9h','9c','2s','7h','9d']))[0] === 3, '99 on a 9-high board (5 cards) is trips');
+  ok(H.eval7(ids(['As','Ks','2s','7s','9d','3s']))[0] === 5, 'a genuine 5-flush within 6 cards is still a flush');
+  const c5 = H.cmp(H.eval7(ids(['As','Ks','2s','7h','9d'])), H.eval7(ids(['9h','9c','2s','7h','9d'])));
+  ok(c5 < 0, 'cmp on two 5-card evals: trips beat ace-high');
+})();
+
+console.log('multiway chops pay 1/(N+1), not half');
+(function () {
+  const pool = P.bandCombos(0.0, 1.0);
+  // Royal flush on the board: everyone plays it, guaranteed 3-way chop → hero share 1/3.
+  const share = H.equityVsField(['2h','3d'], ['As','Ks','Qs','Js','Ts'], [pool, pool], { n: 4000 });
+  ok(Math.abs(share - 1 / 3) < 0.02, 'board royal 3-way chops at ~0.333 (' + share.toFixed(3) + '), not 0.5');
 })();
 
 console.log(fail ? '\n' + fail + ' FAILED' : '\nALL PASS');

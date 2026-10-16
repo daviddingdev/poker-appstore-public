@@ -7,6 +7,7 @@
   function val(ch) { return RANKS.indexOf(ch) + 2; }            // '2'->2 ... 'A'->14
   function parse(c) { return { r: val(c[0]), s: c[1] }; }
   function rname(v) { return ({ 14: 'A', 13: 'K', 12: 'Q', 11: 'J', 10: 'T' })[v] || String(v); }
+  function aRank(r) { return (/^[8A]/.test(r) ? 'an ' : 'a ') + r; }   // an 8, an A
 
   // ---- exact pot-odds ----
   function requiredEquity(bet, pot) { return bet / (pot + 2 * bet); }   // call B into pot P
@@ -99,8 +100,18 @@
     var distinctPaired = Array.from(new Set(pairedBoard));
     var holeTrips = hr.some(function (r) { return cnt[r] >= 3; });
 
+    // Straight flush: do the flush-suit cards themselves contain a straight? Without this
+    // check, Th9h on 8h7h6h classified as "flush (not nut)" and the drill advised not to
+    // raise an unbeatable hand. And when a straight and a (plain) flush coexist, the flush
+    // is the hand — 'straight' used to win the label.
+    var sfMade = false;
+    if (flush) {
+      var fAll = hole.concat(board).filter(function (c) { return c.s === flushSuit; }).map(function (c) { return c.r; });
+      var fHole = hole.filter(function (c) { return c.s === flushSuit; }).map(function (c) { return c.r; });
+      sfMade = straightInfo(new Set(fAll), new Set(fHole)).made;
+    }
     var made = null, strong = false, fine = null;             // fine = precise display name
-    if (flush || str.made) { made = str.made ? 'straight' : 'flush'; strong = true; }
+    if (flush || str.made) { made = sfMade ? 'straight flush' : flush ? 'flush' : 'straight'; strong = true; }
     else if (holeTrips || (isPocket && br.indexOf(hr[0]) >= 0)) {
       made = 'set/trips'; strong = true;
       fine = isPocket ? (hr[0] === top ? 'top set' : 'set') : 'trips';
@@ -130,7 +141,15 @@
     // non-nut flush on a flush board can't raise for value — worse folds, only a
     // higher flush continues). David's TsTc-on-AsKsQs+5s catch, 2026-06-16.
     var nutFlush = true, flushHigher = 0;
-    if (flush) {
+    if (sfMade) {
+      fine = 'straight flush';
+    }
+    else if (!flush && str.made && maxSuit >= 4 && !holeInFlush) {
+      // A bare straight on a 4-flush board hero isn't in: any flush beats it. Without
+      // this it kept the default nutFlush:true and raised "for value" into flushes.
+      nutFlush = false;
+    }
+    else if (flush) {
       var hf = hole.filter(function (c) { return c.s === flushSuit; }).map(function (c) { return c.r; });
       var heroTop = hf.length ? Math.max.apply(null, hf) : 0;
       var bf = board.filter(function (c) { return c.s === flushSuit; }).map(function (c) { return c.r; });
@@ -223,7 +242,13 @@
   //   pos   — 'ip' | 'oop'
   // Facing a bet: pure pot-odds vs range, plus value-raise and semi-bluff layers.
   // No bet to face: value-bet / semi-bluff / range-pressure thresholds.
-  var CLOSE = 0.04;
+  // Facing a bet, "close" is within 4 points of the price, cut on the numbers the sentence prints
+  // (the course states it that way): 5 or more over continues, within 4 either way is close, with
+  // the lean on the side the printed numbers fall (a tie leans call), 5 or more short folds. Cut on
+  // the raw values, "30% · price 34%" read close in the Turn drill and "not getting the price" in
+  // Full hands, and "33% · price 33%" leaned fold (STUDY-3, COPY-4).
+  var CLOSE = 4;
+  function gapPts(eq, price) { return Math.round(eq * 100) - Math.round(price * 100); }
   // ---- RIVER: no cards to come, so the logic changes. Betting is POLAR (value
   // or bluff — no semi-bluffs); a medium hand is a bluff-catcher that should
   // CHECK to induce a bluff / get to showdown, because betting it folds out
@@ -234,10 +259,10 @@
     var eqTxt = 'Showdown equity ≈ <b>' + Math.round(eq * 100) + '%</b>';
     var ideal, ok, why;
     if (price != null) {                                   // facing a river bet = bluff-catch
-      var priceTxt = ' · price <b>' + Math.round(price * 100) + '%</b>';
+      var priceTxt = ' · price <b>' + Math.round(price * 100) + '%</b>', gap = gapPts(eq, price);
       if (eq >= 0.82) { var nuts = eq >= 0.97; ideal = 'raise'; ok = ['raise', 'call']; why = eqTxt + priceTxt + (nuts ? ' — you have <b>the nuts</b>: raise for <b>maximum value</b>. Finished board, nothing to protect — so polarize hard: raise big and charge their whole bluff-and-second-best range. (Flatting to trap is fine, but the value is in the raise.)' : ' — you have the near-nuts: raise for value (no draws left to protect against, so it’s purely value). Calling to trap is fine.'); }
-      else if (eq >= price + CLOSE) { ideal = 'call'; ok = ['call']; why = eqTxt + priceTxt + ' — your hand beats enough of their value-and-bluffs to call. No raise: there are no worse hands to make call you, and nothing to protect against on a finished board.'; }
-      else if (Math.abs(eq - price) <= CLOSE) { ideal = eq >= price ? 'call' : 'fold'; ok = ['call', 'fold']; why = eqTxt + priceTxt + ' — right at the price. The read decides: call vs a player who over-bluffs rivers, fold vs one who only value-bets.'; }
+      else if (gap > CLOSE) { ideal = 'call'; ok = ['call']; why = eqTxt + priceTxt + ' — your hand beats enough of their value-and-bluffs to call. No raise: no worse hand would call a raise, and there is nothing to protect against on a finished board.'; }
+      else if (gap >= -CLOSE) { ideal = gap >= 0 ? 'call' : 'fold'; ok = ['call', 'fold']; why = eqTxt + priceTxt + ' — right at the price. The read decides: call vs a player who over-bluffs rivers, fold vs one who only value-bets.'; }
       else { ideal = 'fold'; ok = ['fold']; if (edge === 'big') ok.push('raise'); why = eqTxt + priceTxt + ' — you don’t beat enough of their betting range to call.' + (edge === 'big' ? ' On a board this favorable a bluff-RAISE (turning your air into a bluff) is a read-based alternative — but the default is fold.' : ' Give it up.'); }
     } else {                                               // checked to / first to act on the river
       // VALUE is judged vs the CALLING range (what calls a bet), not the whole
@@ -245,14 +270,24 @@
       // those out, only better calls. eqCall = eq vs the made-hand calling range.
       var eqC = ctx.eqCall != null ? ctx.eqCall : eq;
       var callTxt = ctx.eqCall != null ? ' · vs the calling range <b>' + Math.round(eqC * 100) + '%</b>' : '';
-      if (eqC >= 0.60) { ideal = 'bet'; ok = ['bet', 'check']; why = eqTxt + callTxt + ' — value: worse made hands still call, so bet to get called by worse. Size it so their bluff-catchers can pay.'; }
-      else if (eqC >= 0.48) { ideal = (node === 'ipCheck' || node === 'ipBet') ? 'bet' : 'check'; ok = ['bet', 'check']; why = eqTxt + callTxt + ' — thin value: a small bet still picks off a few worse pairs, but it’s close — check back if they only call with better.'; }
-      else if (eq >= 0.50) { ideal = 'check'; ok = ['check', 'bet']; why = eqTxt + callTxt + ' — <b>check back / take it to showdown.</b> You’re ahead at showdown (you beat the busted draws), but no WORSE hand calls a bet after they’ve called two streets — betting only folds out what you beat and gets called by what beats you. Bet nothing; win at showdown.'; }
-      else if (eq >= 0.30) { ideal = 'check'; ok = ['check', 'bet']; why = eqTxt + ' — <b>bluff-catcher: check to induce.</b> You beat their bluffs but lose to their value — betting folds out worse and is only called (or raised) by better. Check, and call a bet you’re priced into.'; }
-      else {   // eq < 0.30: no showdown value — bluff IFF there's real fold equity (capped range), else give up
+      // The bands are cut on the printed numbers, as chapter 7's river map states them (60+ value,
+      // 48–60 thin, 50+ check back, 30–50 catch bluffs): "vs the calling range 60%" read thin value
+      // in five spots and value in eight (STUDY-3).
+      var eqP = Math.round(eq * 100), eqCP = Math.round(eqC * 100);
+      if (eqCP >= 60) { ideal = 'bet'; ok = ['bet', 'check']; why = eqTxt + callTxt + ' — value: worse made hands still call, so bet to get called by worse. Size it so their bluff-catchers can pay.'; }
+      else if (eqCP >= 48) { ideal = (node === 'ipCheck' || node === 'ipBet') ? 'bet' : 'check'; ok = ['bet', 'check']; why = eqTxt + callTxt + ' — thin value: a small bet still picks off a few worse pairs, but it’s close — check back if they only call with better.'; }
+      else if (eqP >= 50) { ideal = 'check'; ok = ['check', 'bet']; why = eqTxt + callTxt + ' — <b>check back / take it to showdown.</b> You’re ahead at showdown (you beat the busted draws), but no WORSE hand calls a bet after they’ve called two streets — betting only folds out what you beat and gets called by what beats you. Bet nothing; win at showdown.'; }
+      else if (eqP >= 30) { ideal = 'check'; ok = ['check', 'bet']; why = eqTxt + ' — <b>bluff-catcher: check to induce.</b> You beat their bluffs but lose to their value — betting folds out worse and is only called (or raised) by better. Check, and call a bet you’re priced into.'; }
+      else {   // under 30% printed: no showdown value — bluff IFF there's real fold equity (capped range), else give up
         var fe = ctx.foldEq != null ? ctx.foldEq : 0, beB = 0.40;   // ~⅔-pot bluff breaks even at ~40% folds
-        if (fe >= 0.50) { ideal = 'bet'; ok = ['bet', 'check']; why = eqTxt + ' — <b>bluff</b>: no showdown value, but the villain’s line is <b>capped</b> — about <b>' + Math.round(fe * 100) + '%</b> of their range folds to a bet (a ⅔-pot bluff needs ~' + Math.round(beB * 100) + '%). Fold equity is real → betting is +EV. <b>But never bluff a station</b> — give up vs a player who won’t fold.'; }
-        else { ideal = 'check'; ok = ['check', 'bet']; why = eqTxt + ' — no showdown value, and only ~<b>' + Math.round(fe * 100) + '%</b> of their range folds (a bluff needs ~' + Math.round(beB * 100) + '%) — not enough fold equity, so a bluff just donates. <b>Give up and check.</b>'; }
+        // Bluffing wants a margin over break-even (the fold estimate is rough, and a bet can be raised),
+        // so 40–50% folds is the close band: checking stays the answer and a bluff is graded close. The
+        // band is cut on the printed percentage, so the sentence never says "only 43% … needs 40%"
+        // (the Mac's a5dab85, item 3).
+        var feP = Math.round(fe * 100), beP = Math.round(beB * 100);
+        if (fe >= 0.50) { ideal = 'bet'; ok = ['bet', 'check']; why = eqTxt + ' — <b>bluff</b>: no showdown value, but the villain’s line is <b>capped</b> — about <b>' + feP + '%</b> of their range folds to a bet (a ⅔-pot bluff needs ~' + beP + '%). Fold equity is real → betting is +EV. <b>But never bluff a station</b> — give up vs a player who won’t fold.'; }
+        else if (feP >= beP) { ideal = 'check'; ok = ['check', 'bet']; why = eqTxt + ' — no showdown value, and about <b>' + feP + '%</b> of their range folds, against the ~' + beP + '% a ⅔-pot bluff needs just to break even. A bluff’s margin is too thin to count on, so it’s close: checking gives up little, and a bluff pays only against a player who folds too much.'; }
+        else { ideal = 'check'; ok = ['check', 'bet']; why = eqTxt + ' — no showdown value, and only ~<b>' + feP + '%</b> of their range folds (a bluff needs ~' + beP + '%) — not enough fold equity, so a bluff just donates. <b>Give up and check.</b>'; }
       }
     }
     return { ideal: ideal, ok: ok, why: why, options: NODE_OPTS[node] };
@@ -263,7 +298,7 @@
     var eqTxt = 'Equity vs ' + (ctx.multiway >= 2 ? 'the field' : 'their range') + ' ≈ <b>' + Math.round(eq * 100) + '%</b>';
     var ideal, ok, why;
     if (price != null) {                                   // facing a bet
-      var priceTxt = ' · price <b>' + Math.round(price * 100) + '%</b>';
+      var priceTxt = ' · price <b>' + Math.round(price * 100) + '%</b>', gap = gapPts(eq, price);
       if (eq >= 0.60) {
         var nutMonster = ctx.nutFlush !== false;
         var bigMade = MONSTER_MADE[ctx.made] || ctx.made === 'overpair';
@@ -274,12 +309,17 @@
           : (bigMade && !nutMonster)
             ? ' — a flush, but NOT the nuts on a flush board: <b>call, don’t raise</b>. Raising folds out every worse hand (they fear the flush) and only a HIGHER flush continues — you’d fold out what you beat and isolate vs what beats you. Trap and bluff-catch instead.'
             : ' — way ahead of their BETTING range, but one pair raised into action folds the worse hands that were paying and answers only to the re-raise tail: call-dominant, raise sparingly for protection.');
-      } else if (eq >= price + CLOSE) {
+      } else if (gap > CLOSE) {
         ideal = 'call'; ok = ['call'];
-        if (cat === 'draw' || (cat === 'value' && ctx.wet)) ok.push('raise');
-        why = eqTxt + priceTxt + ' — clear continue.' + (ok.indexOf('raise') > 0 ? ' Raising as a semi-bluff also works with this much equity.' : '');
-      } else if (Math.abs(eq - price) <= CLOSE) {
-        ideal = eq >= price ? 'call' : 'fold'; ok = ['call', 'fold'];
+        // A draw can raise as a semi-bluff. A made hand on a wet board can raise too, but that is
+        // protection, not a semi-bluff, and never with a flush below the nuts, where only a higher
+        // flush calls the raise (chapter 6; the eq ≥ 60% branch above says the same). It read
+        // "Raising as a semi-bluff also works" on 56 made hands, a 5-high flush among them (STUDY-6).
+        var protect = cat === 'value' && ctx.wet && ctx.nutFlush !== false;
+        if (cat === 'draw' || protect) ok.push('raise');
+        why = eqTxt + priceTxt + ' — clear continue.' + (cat === 'draw' ? ' Raising as a semi-bluff also works with this much equity.' : protect ? ' A raise for protection also works on this wet board.' : '');
+      } else if (gap >= -CLOSE) {
+        ideal = gap >= 0 ? 'call' : 'fold'; ok = ['call', 'fold'];
         why = eqTxt + priceTxt + ' — right at the price: close either way. Implied odds and reads break the tie.';
       } else {
         ideal = 'fold'; ok = ['fold'];
@@ -308,7 +348,7 @@
       } else if (edge === 'big') {
         ideal = 'bet'; ok = ['bet', 'check'];
         why = eqTxt + ' — weak hand but the board smashes your range: ' +
-          (ctx.wet ? 'a stab here has to be bigger (wet texture), so it needs the fold to happen now.' : 'small range-pressure bet prints.');
+          (ctx.wet ? 'a stab here has to be bigger (wet texture), so it needs the fold to happen now.' : 'a small range-pressure bet prints.');
       } else if (edge === 'low') {
         ideal = 'check'; ok = ['check'];
         why = eqTxt + ' — weak hand on their board: betting just burns chips.';
@@ -543,7 +583,7 @@
   // monster: stack-off value · strong: one-pair value that becomes a bluff-catcher
   // marginal: showdown hand, pot control · draw: semi-bluff with real outs
   // semibluff: overs/gutter equity-bluff · air: range pressure only
-  var MONSTER_MADE = { 'set/trips': 1, 'two pair': 1, straight: 1, flush: 1 };
+  var MONSTER_MADE = { 'set/trips': 1, 'two pair': 1, straight: 1, flush: 1, 'straight flush': 1 };
   function handTier(cls, eq) {
     if (MONSTER_MADE[cls.made]) return 'monster';
     if (cls.made === 'overpair' && eq >= 0.84) return 'monster';   // AA-on-rags class
@@ -704,13 +744,13 @@
     if (cc.theirSuit) brake.push(cc.theirN >= 4 ? 'any ' + cc.theirSuit + ' (four-flush board — you hold none)'
       : (cc.theirN === 3 ? 'fourth ' : 'third ') + cc.theirSuit + ' (completes THEIR draws, you hold none)');
     if (cc.overBrake) brake.push(cc.overBrake + ' (overcard to your pair — their range catches up)');
-    if (cc.strComp) brake.push('a ' + cc.strComp + ' (completes straights for their range)');
+    if (cc.strComp) brake.push(aRank(cc.strComp) + ' (completes straights for their range)');
     if (cc.oversTxt) {
       if (cc.oversImprove) barrel.push(cc.oversTxt + ' (improves you past your pair)');
       else if (cc.oversHeld) barrel.push(cc.oversTxt + ' (over the board — and you hold ' + cc.oversHeld + ')');
       else if (cc.oversRange) barrel.push(cc.oversTxt + ' (over the board — hits your raising range)');
     }
-    if (cc.mids) brake.push('a ' + cc.mids + ' (pairs the middle of the board — their calling range holds it)');
+    if (cc.mids) brake.push(aRank(cc.mids) + ' (pairs the middle of the board — their calling range holds it)');
     barrel = barrel.slice(0, 3); brake = brake.slice(0, 2);
     var text;
     if (tier === 'monster') {
@@ -774,7 +814,7 @@
         tier === 'monster' ? ('you’re trapping: the plan is raise this street or the ' + N + ' — flat only vs frequent barrelers' +
           (heavyBrake ? '. The one card that changes the plan: ' + heavyBrake.split(' (')[0] + ' — re-read there instead of auto-stacking.' : ', and then never fold later.'))
         : tier === 'strong' ? 'bricks: call again at the right price. ' + (tp.brake.length ? capFirst(tp.brake[0].split(' (')[0]) + ' + a big bet is the judgment spot — one pair is a pure bluff-catcher there.' : 'Scare card + big bet: price and their frequency decide, not fear.')
-        : tier === 'draw' ? 'when it hits (' + (tp.barrel.length ? tp.barrel[0].split(' (')[0] : 'your out') + '), switch to value. Brick + another barrel = strict price math, no sticky calls.'
+        : tier === 'draw' ? 'when it hits (' + (tp.barrel.length ? tp.barrel[0].split(' (')[0] : 'your outs') + '), switch to value. Brick + another barrel = strict price math, no sticky calls.'
         : tier === 'marginal' ? 'you’re calling to catch bluffs — call bricks at fair prices, fold when the ' + N + ' completes their story AND the sizing turns up.'
         : (ctx.price != null && ctx.eq >= ctx.price + 0.04)
           ? 'you’re calling on live equity (overcard/draw outs), not a made hand: improve → value; miss → fold to the next barrel, no hero calls.'

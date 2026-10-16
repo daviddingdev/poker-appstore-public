@@ -1,9 +1,9 @@
-# TableLog
+# Pocket Tells
 
 An offline-first poker hand logger and drill trainer. No server, no account, no network
 call — the whole product runs in the browser and keeps its data on the device.
 
-_Public overview of a private project (an iOS App Store build). Architecture only._
+_Public overview of a private project (an iOS App Store build, formerly TableLog). Architecture only._
 
 ## The constraint that shaped it
 
@@ -63,7 +63,7 @@ The storage layer is built for that:
 
 ```mermaid
 flowchart LR
-  UI["index.html<br/><small>four tabs, one shell</small>"]:::ui
+  UI["index.html<br/><small>five tabs, one shell</small>"]:::ui
   P["poker.js<br/><small>hand model, shorthand parse</small>"]:::core
   H["handeval.js<br/><small>7-card evaluator</small>"]:::core
   D["dealer.js<br/><small>deck, sampling</small>"]:::core
@@ -91,8 +91,13 @@ flowchart LR
 
 ## The rest of the design
 
-- **Four tabs, fixed.** Log, review, drill, stats. A feature that doesn't fit one of them
-  doesn't ship; the tab bar is a contract with the user, not a navigation widget.
+- **Five tabs, fixed.** Home (the hub), Log (capture), Table (the home-game assistant:
+  settle-up, the nights ledger, the leaderboard), Study (drills) and Progress (reports). Depth
+  goes into pushed windows, never a sixth tab; the tab bar is a contract with the user, not a
+  navigation widget.
+- **One purchase, no account.** A one-time Pro unlock through StoreKit 2 and a small native
+  plugin: Apple processes it, there is no third-party SDK, and nothing is sent anywhere by the
+  app, so the "no data collected" privacy label stays literally true.
 - **Drills are generated from the user's own logged hands**, so practice concentrates on
   the spots that actually occur in their game rather than on a generic curriculum.
 - **Review is variance-honest.** The statistics refuse to present short-run results as
@@ -112,4 +117,4 @@ wrapped for the App Store. Test suite runs against a headless browser with a fak
 backend that can be told to evict at any point, which is how the reclamation paths above
 are actually exercised.
 
-_Last updated August 2026._
+_Last updated October 2026._

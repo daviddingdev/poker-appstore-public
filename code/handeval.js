@@ -11,11 +11,13 @@
   function rankOf(id) { return (id >> 2) + 2; }     // 2..14
   function suitOf(id) { return id & 3; }
 
-  // Comparable score array for the best 5-card hand out of 7 card-ids.
+  // Comparable score array for the best 5-card hand out of the given card-ids.
+  // Accepts 5, 6 or 7 ids: study's real-spot replays evaluate hero+flop (5) and
+  // hero+turn (6), and a hard-coded 7 turned every missing card into a phantom 2♠.
   function eval7(ids) {
-    var i, r, s;
+    var i, r, s, len = ids.length;
     var cnt = new Array(15).fill(0), suitCnt = [0, 0, 0, 0];
-    for (i = 0; i < 7; i++) { cnt[rankOf(ids[i])]++; suitCnt[suitOf(ids[i])]++; }
+    for (i = 0; i < len; i++) { cnt[rankOf(ids[i])]++; suitCnt[suitOf(ids[i])]++; }
 
     var flushSuit = -1;
     for (s = 0; s < 4; s++) if (suitCnt[s] >= 5) flushSuit = s;
@@ -31,7 +33,7 @@
 
     if (flushSuit >= 0) {
       var fpresent = new Array(15).fill(false), franks = [];
-      for (i = 0; i < 7; i++) if (suitOf(ids[i]) === flushSuit) { fpresent[rankOf(ids[i])] = true; franks.push(rankOf(ids[i])); }
+      for (i = 0; i < len; i++) if (suitOf(ids[i]) === flushSuit) { fpresent[rankOf(ids[i])] = true; franks.push(rankOf(ids[i])); }
       if (fpresent[14]) fpresent[1] = true;
       var sf = bestStraight(fpresent);
       if (sf) return [8, sf];
@@ -128,7 +130,7 @@
     var deck = [];
     for (var d = 0; d < 52; d++) if (!blocked0[d]) deck.push(d);
     var need = 5 - boardIds.length, V = pools.length;
-    var wins = 0, ties = 0, done = 0, guard = 0;
+    var share = 0, done = 0, guard = 0;
     while (done < n && guard < n * 200) {
       guard++;
       var used = {};
@@ -147,16 +149,18 @@
       while (run.length < need) { var c = deck[(Math.random() * deck.length) | 0]; if (!used[c]) { used[c] = 1; run.push(c); } }
       var full = boardIds.concat(run);
       var h = eval7(heroIds.concat(full));
-      var beatsAll = true, tieAny = false;
+      // An N-way chop pays hero 1/(N+1) of the pot, not half — a guaranteed 3-way chop
+      // used to report 0.500 equity instead of 0.333.
+      var beatsAll = true, tied = 0;
       for (var j = 0; j < V; j++) {
         var r = cmp(h, eval7(vills[j].concat(full)));
         if (r < 0) { beatsAll = false; break; }
-        if (r === 0) tieAny = true;
+        if (r === 0) tied++;
       }
-      if (beatsAll) { if (tieAny) ties++; else wins++; }
+      if (beatsAll) share += 1 / (1 + tied);
       done++;
     }
-    return done ? (wins + ties * 0.5) / done : 0;
+    return done ? share / done : 0;
   }
 
   var HandEval = { cardId: cardId, eval7: eval7, cmp: cmp, equityVsRange: equityVsRange, equityVsField: equityVsField };

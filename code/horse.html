@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f6f6f4" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#141519" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#18181b">
+<meta name="color-scheme" content="dark">
 <title>HORSE Cheat Sheet</title>
 <style>
   :root{
@@ -12,10 +12,12 @@
     --line:rgba(0,0,0,.12); --line2:rgba(0,0,0,.07);
     --val:#1d7a52; --warn:#a8701a; --info:#2c6fb0; --accent:#7a52c4;
   }
-  @media (prefers-color-scheme: dark){
-    :root{ --bg:#141519; --panel:#1c1e23; --ink:#e9e9ea; --ink2:#a6a9b0; --ink3:#73767d;
+  /* These guides render inside the app, which is dark in every iOS appearance — so they
+     are too. (Following the OS put a cream page inside the dark app in light mode.) */
+  @media all{
+    :root{ --bg:#18181b; --panel:#232327; --ink:#f3f3f5; --ink2:#a9a9b1; --ink3:#7a7a83;
       --line:rgba(255,255,255,.14); --line2:rgba(255,255,255,.07);
-      --val:#56c79a; --warn:#e0a64e; --info:#5fa3e0; --accent:#a690e8; }
+      --val:#56c79a; --warn:#e0a64e; --info:#5fa3e0; --accent:#45d2b4; }
   }
   *{box-sizing:border-box}
   body{margin:0; background:var(--bg); color:var(--ink);
@@ -35,7 +37,7 @@
   section{margin-top:34px; scroll-margin-top:16px}
   h2{font-size:21px; font-weight:620; margin:0 0 2px; letter-spacing:-.2px}
   .h2sub{color:var(--ink2); font-size:14.5px; margin:0 0 16px}
-  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); gap:14px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr)); gap:14px}
   .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px 18px}
   .card h3{font-size:16.5px; font-weight:600; margin:0 0 10px}
   .card h3 .tag{font-size:12px; font-weight:500; color:var(--ink3); margin-left:6px}
@@ -51,7 +53,7 @@
   .walk{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-top:14px}
   .walk h3{font-size:15px; font-weight:600; margin:0 0 8px}
   .walk ol{margin:0; padding-left:20px} .walk li{font-size:13.5px; color:var(--ink2); margin:4px 0; line-height:1.5} .walk li b{color:var(--ink)}
-  .two{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px}
+  .two{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr)); gap:14px}
   .branch{border-left:3px solid var(--line); padding:5px 0 5px 12px; border-radius:0}
   .branch.v{border-left-color:var(--val)} .branch.v .lbl{color:var(--val)}
   .branch.w{border-left-color:var(--warn)} .branch.w .lbl{color:var(--warn)}
@@ -70,8 +72,8 @@
 
 <header>
   <h1>HORSE Cheat Sheet</h1>
-  <div class="sub">Five fixed-limit games rotating each level: <b>H</b>old'em · <b>O</b>maha Hi-Lo · <b>R</b>azz · <b>S</b>even-card Stud · stud <b>E</b>ight-or-better. You can't punt a stack in limit — the edge is starting-hand discipline and small edges across all five.</div>
-  <div class="lead"><b>The whole game in one line:</b> play tight starting hands, draw only to the <b>nuts</b> in the split games and only when <b>live</b> in the stud games, value-bet relentlessly, and bluff almost never. Lose nothing in your weak game (Razz), grind your edges in the rest.</div>
+  <div class="sub">Five fixed-limit games rotating each level: <b>H</b>old'em · <b>O</b>maha Hi-Lo · <b>R</b>azz · <b>S</b>even-Card Stud · Stud <b>E</b>ight-or-Better. You can't punt a stack in limit — the edge is starting-hand discipline and small edges across all five.</div>
+  <div class="lead"><b>The whole game in one line:</b> play tight starting hands, draw only to the <b>nuts</b> in the split games and only when <b>live</b> in the stud games, value-bet relentlessly, and bluff almost never. Lose little in your weakest game and grind the edges in the rest.</div>
   <nav>
     <a href="#betting">Betting</a>
     <a href="#hold">H · Hold'em</a>
@@ -92,7 +94,7 @@
       <h3>Where the bet doubles</h3>
       <div class="row bet"><span class="k">Flop games</span><span class="v">H, O: <b>small bet</b> preflop &amp; flop · <b>big bet</b> turn &amp; river. Use blinds (SB = ½ small bet, BB = 1 small bet).</span></div>
       <div class="row bet"><span class="k">Stud games</span><span class="v">R, S, E: <b>small bet</b> 3rd &amp; 4th street · <b>big bet</b> 5th, 6th, 7th. Use antes + a bring-in (no blinds).</span></div>
-      <div class="row bet"><span class="k">Bring-in</span><span class="v">everyone antes, then one player posts a forced part-bet: the <b>lowest</b> up-card in Stud &amp; Stud-8, the <b>highest</b> up-card in Razz. Others can "complete" to the full small bet.</span></div>
+      <div class="row bet"><span class="k">Bring-in</span><span class="v">everyone antes, then one player posts a forced part-bet: the <b>lowest</b> up-card in Stud &amp; Stud 8, the <b>highest</b> up-card in Razz. Others can "complete" to the full small bet.</span></div>
     </div>
     <div class="walk">
       <h3>Limit Hold'em, step by step ($100/$200)</h3>
@@ -110,10 +112,10 @@
 <!-- ===== HOLD'EM ===== -->
 <section id="hold">
   <h2>H · Limit Hold'em</h2>
-  <p class="h2sub">The one you've never played. Same shape as no-limit, but fixed bets make it a <b>value &amp; showdown</b> game — you can't bet big to protect or bluff, so you raise to charge and you call down.</p>
+  <p class="h2sub">Same shape as no-limit, but fixed bets make it a <b>value &amp; showdown</b> game — you can't bet big to protect or bluff, so you raise to charge and you call down.</p>
   <div class="card">
-    <div class="row open"><span class="k">Open with</span><span class="v"><b>Any seat:</b> AA–JJ, AK, AQs. <b>Mid+:</b> TT–99, AQ, AJs, KQs, ATs, KJs. <b>Late / multiway:</b> small pairs (set-mine), suited connectors, suited aces, suited Broadways. Fold offsuit junk &amp; weak offsuit aces from early.</span></div>
-    <div class="row"><span class="k">Chase / raise</span><span class="v">Raise premiums for value &amp; to <b>charge draws</b>. Chase flush/open-ender draws — limit pots give big odds, so 8–9-out draws usually have the price. <b>Don't slowplay</b>; you can't make it up with a big bet later, so get your bets in now.</span></div>
+    <div class="row open"><span class="k">Open with</span><span class="v"><b>Any seat:</b> AA–JJ, AK, AQs. <b>Mid+:</b> TT–99, AQ, AJs, KQs, ATs, KJs. <b>Late / multiway:</b> small pairs (set-mine), suited connectors, suited aces, suited broadways. Fold offsuit junk &amp; weak offsuit aces from early.</span></div>
+    <div class="row"><span class="k">Chase / raise</span><span class="v">Raise premiums for value &amp; to <b>charge draws</b>. Chase flush/open-ender draws — limit pots give big odds, so 8–9-out draws usually have the price. <b>Don't slow-play</b>; you can't make it up with a big bet later, so get your bets in now.</span></div>
     <div class="row"><span class="k">Bluff</span><span class="v">Thin. <b>Semi-bluff your draws</b> (bet/raise with equity). Heads-up, a c-bet or turn barrel vs a tight player on a scary board works. Multiway or vs a station → don't; value-bet and call down.</span></div>
   </div>
 </section>
@@ -124,7 +126,7 @@
   <p class="h2sub">Four cards, use <b>exactly 2 + 3</b>. Pot splits between best high and best low (low = five unpaired cards 8-and-under; <b>A-2-3-4-5 is the best low</b>; the ace plays both ways; a low needs three low ranks on board to exist).</p>
   <div class="card">
     <div class="row bet"><span class="k">Betting</span><span class="v">like Hold'em — blinds, small bet pre/flop, big bet turn/river.</span></div>
-    <div class="row open"><span class="k">Open with</span><span class="v"><b>A-2 + high backup:</b> A-2-3-4, A-A-2-x, A-2 double-suited, suited aces. Coordinated high hands (A-K-Q-J ds). Premium = <b>A-2-3-4 double-suited</b>. Cards that work <b>together</b>.</span></div>
+    <div class="row open"><span class="k">Open with</span><span class="v"><b>A-2 + high backup:</b> A-2-3-4, A-A-2-x, A-2 double-suited, suited aces. Coordinated high hands (A-K-Q-J double-suited). Premium = <b>A-2-3-4 double-suited</b>. Cards that work <b>together</b>.</span></div>
     <div class="row"><span class="k">Chase / raise</span><span class="v">It's a <b>nut &amp; scoop game</b>: draw to the <b>nut low (A-2)</b> and/or nut high, raise hands that can win <b>both</b>. <b>Never chase a non-nut low</b> — you get <b>quartered</b> (split the low, win ¼).</span></div>
     <div class="row"><span class="k">Bluff</span><span class="v">Rare — multiway, split-pot, everyone draws to the nuts. Mostly value. Only bluff heads-up repping the nut low/high they can't have.</span></div>
   </div>
@@ -157,12 +159,12 @@
 <!-- ===== STUD 8 ===== -->
 <section id="stud8">
   <h2>E · Stud Eight-or-Better (Stud Hi-Lo)</h2>
-  <p class="h2sub">Your strongest game. Seven-card stud, hi/lo split (low = 8-or-better, same as Omaha 8). <b>Scoop-oriented.</b></p>
+  <p class="h2sub">Seven-card stud, hi/lo split (low = 8-or-better, same as Omaha 8). <b>Scoop-oriented.</b></p>
   <div class="card">
     <div class="row bet"><span class="k">Betting</span><span class="v">antes + bring-in (<b>lowest</b> up-card brings in); small bet 3rd/4th, big bet 5th+.</span></div>
     <div class="row open"><span class="k">Open with</span><span class="v"><b>Three low cards</b> — best with an ace and suited/connected. <b>A-2-3 is premium</b> (nut-low draw + straight/flush + scoop). Big pairs for the high, cautiously.</span></div>
     <div class="row"><span class="k">Chase / raise</span><span class="v">Draw to the <b>nut low + a high</b> and aim to <b>scoop</b>; raise the hands that can win both. Lows must be live (low cards not all dead in up-cards).</span></div>
-    <div class="row"><span class="k">Bluff</span><span class="v">Board-rep like Stud, but the split pot shrinks bluffing — mostly value/scoop. Your existing Stud-8 notes apply here.</span></div>
+    <div class="row"><span class="k">Bluff</span><span class="v">Board-rep like Stud, but the split pot shrinks bluffing — mostly value/scoop.</span></div>
   </div>
 </section>
 
@@ -171,15 +173,16 @@
   <h2>Chase · raise · bluff — across all five</h2>
   <p class="h2sub">The three decisions, unified — because the limit format makes them play the same way in every game.</p>
   <div class="two">
-    <div class="rule i"><div class="tag">CHASE</div><p>Limit = <b>big pot odds</b>, so real draws chase profitably — <b>but only to the nuts</b> in the split games (O, E) and <b>only when live</b> in the stud games (R, S, E). Count outs, compare to the price; for a true 8+-out draw you'll usually have it.</p></div>
-    <div class="rule i"><div class="tag">RAISE</div><p>For <b>value</b> — charge draws, build the pot, thin the field — and as a <b>semi-bluff</b> with a live draw. Raising in position can also buy a free card (raise flop, check back turn). <b>Don't slowplay</b>: limit can't recover streets you give away.</p></div>
+    <div class="rule i"><div class="tag">CHASE</div><p>Limit = <b>big pot odds</b>, so real draws chase profitably — <b>but only to the nuts</b> in the split games (O, E) and <b>only when live</b> in the stud games (R, S, E). Count outs, compare to the price; for a true draw with 8 or more outs you'll usually have it.</p></div>
+    <div class="rule i"><div class="tag">RAISE</div><p>For <b>value</b> — charge draws, build the pot, thin the field — and as a <b>semi-bluff</b> with a live draw. Raising in position can also buy a free card (raise flop, check back turn). <b>Don't slow-play</b>: limit can't recover streets you give away.</p></div>
     <div class="rule w" style="grid-column:1/-1"><div class="tag">BLUFF — the short list</div><p>Bluffing is <b>weak everywhere</b> in limit — one more bet is a cheap call, and recreational fields + multiway pots call you down. The only bluffs that work: <b>(1) semi-bluffs</b> (you have outs), <b>(2) board representation heads-up in the stud games</b> (your up-cards tell a scary story — a bricked Razz board, a paired door in Stud), <b>(3) ante / bring-in steals</b> with a strong-looking up-card. The rule: <b>bluff with equity, or with a board, heads-up — never naked, never multiway, never into a station.</b></p></div>
   </div>
   <div class="foot">
-    Fixed-limit study aid for a soft mixed field — tight starting hands and nut-drawing beat this lineup by themselves. The discipline that wins: <b>lose almost nothing in Razz, draw to the nuts in the split games, value-bet the rest, and let the recreational players spew the bluffs you're not making.</b>
+    Fixed-limit study aid for a soft mixed field — tight starting hands and nut-drawing beat most mixed-game lineups by themselves. The discipline that wins: <b>lose almost nothing in Razz, draw to the nuts in the split games, value-bet the rest, and let the recreational players spew the bluffs you're not making.</b>
   </div>
 </section>
 
 </div>
+<script src="guide.js"></script>
 </body>
 </html>

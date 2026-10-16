@@ -96,18 +96,45 @@
     }
     if (hero === 'BB') return null;                         // walk — no decision
     var spot = { kind: 'open', pos: hero, depth: depth <= 12 ? (depth === 12 ? 12 : 10) : bd, c1: c1, c2: c2 };
-    // chance the open gets 3-bet behind (chained second decision)
-    if (spot.depth >= 20) {
-      var after = ORDER.slice(ORDER.indexOf(hero) + 1);
-      var pr = 0;
-      after.forEach(function (s) { pr += P().vsThresholds(bd, hero).tb * LIVE_3B / after.length * after.length; });
-      pr = Math.min(0.14, P().vsThresholds(bd, hero).tb * LIVE_3B * after.length * 0.45);
-      if (bd >= 50) pr = Math.min(0.25, pr * 2);   // deep: re-raise reps matter
-      if (Math.random() < pr) {
-        spot.chainRaiser = after[rnd(after.length)];
-      }
-    }
+    var cr = chainRaiser(hero, spot.depth);
+    if (cr) spot.chainRaiser = cr;
     return spot;
+  }
+  // Chance the open gets 3-bet behind (the chained second decision): a seat behind the
+  // opener, or null. Its own function so the free tier's 100bb opens (study.js) roll the
+  // chain exactly the way the live deal does, instead of keeping a second copy of the rate.
+  function chainRaiser(hero, depth) {
+    if (depth < 20) return null;                             // short: first-in is jam-or-fold
+    var bd = band(depth);
+    var after = ORDER.slice(ORDER.indexOf(hero) + 1);
+    var pr = Math.min(0.14, P().vsThresholds(bd, hero).tb * LIVE_3B * after.length * 0.45);
+    if (bd >= 50) pr = Math.min(0.25, pr * 2);   // deep: re-raise reps matter
+    return Math.random() < pr ? after[rnd(after.length)] : null;
+  }
+
+  // FREE TIER (LAUNCH_PLAN §2): a free player gets 10 chained "they 3-bet you" spots a local
+  // day. Counted from the drill log the app already keeps (each answer's mode, kind and time),
+  // so nothing new is stored and a restored backup carries the count with it. Sample answers
+  // never count. A player who moves the phone's clock gets more; accepted. It lives here,
+  // beside the chain it caps, because this file loads before both of its readers: the drill
+  // (study.js) and the app shell (§3's "hit today's 10 on 3 different days").
+  var FREE_3BET_DAY = 10;
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  // Local calendar day, the same YYYY-MM-DD the app's dateOf() writes.
+  function dayKey(ts) { var d = new Date(ts); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function threeBetsByDay(drills) {
+    var out = {};
+    (drills || []).forEach(function (e) {
+      if (!e || e.sample || e.m !== 'pf' || e.k !== 'vs3bet' || !e.t) return;
+      var k = dayKey(e.t); out[k] = (out[k] || 0) + 1;
+    });
+    return out;
+  }
+  function threeBetsOn(drills, ts) { return threeBetsByDay(drills)[dayKey(ts == null ? Date.now() : ts)] || 0; }
+  function daysAtThreeBetCap(drills) {
+    var by = threeBetsByDay(drills), n = 0;
+    for (var k in by) if (by[k] >= FREE_3BET_DAY) n++;
+    return n;
   }
 
   var DEPTHS_DEEP = [[100, 0.45], [50, 0.55]];
@@ -125,7 +152,18 @@
     } finally { DEPTHS = save; }
   }
 
-  var Dealer = { simulateSpot: simulateSpot, walk: walk, ORDER: ORDER, LIMP_EXTRA: LIMP_EXTRA };
+  // allDepths()/band exported so the coverage test can assert that every depth this
+  // dealer can EMIT has a grading path in poker.js — the 12bb hole was exactly a depth
+  // the dealer produced and no table graded. Function, not the array: DEPTHS is
+  // reassigned by focus modes, and the union across all three lists is the contract.
+  function allDepths() {
+    var seen = {};
+    [DEPTHS, DEPTHS_DEEP, DEPTHS_SHORT].forEach(function (L) { L.forEach(function (p) { seen[p[0]] = 1; }); });
+    return Object.keys(seen).map(Number);
+  }
+  var Dealer = { simulateSpot: simulateSpot, walk: walk, ORDER: ORDER, LIMP_EXTRA: LIMP_EXTRA, allDepths: allDepths, band: band,
+    chainRaiser: chainRaiser, FREE_3BET_DAY: FREE_3BET_DAY, dayKey: dayKey,
+    threeBetsByDay: threeBetsByDay, threeBetsOn: threeBetsOn, daysAtThreeBetCap: daysAtThreeBetCap };
   g.Dealer = Dealer;
   if (typeof module !== 'undefined' && module.exports) module.exports = Dealer;
 })(typeof window !== 'undefined' ? window : globalThis);
