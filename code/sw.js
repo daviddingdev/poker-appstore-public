@@ -1,4 +1,4 @@
-const CACHE = 'pokerlog-v143';
+const CACHE = 'pokerlog-v147';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './storage.js',
   './playbook.html', './horse.html', './howto.html', './privacy.html', './guide.js',
   // The Library's guides (LAUNCH_PLAN §8): four free, nine Pro chapters, one shared stylesheet.

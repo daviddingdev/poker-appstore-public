@@ -834,8 +834,26 @@
     });
     return out;
   }
+  // The rows say only the folds of players who were in the hand: a fold from someone who had called,
+  // bet, raised or checked earlier. "HJ folds · CO folds · BTN folds · SB folds" before the action
+  // came round said nothing and took two lines (the owner, 2026-10-16). Display only: facedBet and
+  // realAllIn read the pool's whole line.
+  function quietFolds(L) {
+    var inHand = {}, out = {};
+    REAL_STREETS.forEach(function (st) {
+      if (L[st] == null) return;
+      out[st] = String(L[st]).split(' · ').filter(function (a) {
+        var m = /^(\w+) (\w+)/.exec(a.trim());
+        if (!m) return true;
+        if (m[2] === 'folds') return !!inHand[m[1]];
+        inHand[m[1]] = true;
+        return true;
+      }).join(' · ');
+    });
+    return out;
+  }
   function realSpotHtml(s, prog) {
-    var e = s.e, L = e.line, fb = e.decision === 'fcr' ? facedBet(e) : null;
+    var e = s.e, L = quietFolds(e.line || {}), fb = e.decision === 'fcr' ? facedBet(e) : null;
     function row(n, t) { return t ? '<div style="font-size:12.5px;line-height:1.5"><span style="color:var(--dim);display:inline-block;min-width:54px">' + n + '</span> ' + esc(seatTxt(raiseWords(t, n === 'Preflop'))) + '</div>' : ''; }
     var vp = seatW(e.villPos), hp = seatW(e.heroPos);
     // The pool's pot already holds the bet you face, while "×pot" is the pot before it. A bet
@@ -3189,7 +3207,7 @@
   window.StudyUI._test = { refHtml: refHtml, mixBars: mixBars, splitStreets: splitStreets, myReviewHands: myReviewHands, mineScenario: mineScenario, renderMine: renderMine, revealMine: revealMine, mineRate: function(){ return MINE_RATE; }, scenarioCbet: scenarioCbet, scenarioTurn: scenarioTurn, scenarioRiver: scenarioRiver, gradeCbet: gradeCbet, cbetSpot: cbetSpot, scenarioPF: scenarioPF, leakPF: leakPF,
     setRealPool: function (p) { REAL_POOL = p; REAL_ERR = false; },
     setRealHands: function (p) { REAL_HANDS = p; REAL_HANDS_ERR = false; }, handAt: handAt, handScenario: handScenario,
-    gradePF: gradePF, aggrInfo: aggrInfo, realAlts: realAlts, realScore: realScore, engWhy: engWhy, tailHtml: tailHtml, realAllIn: realAllIn, realIdeal: realIdeal, realScenario: realScenario, mineCut: mineCut, mineHold: mineHold, mineAction: mineAction, realSpotHtml: realSpotHtml, rangeTxt: rangeTxt, mineWho: mineWho,
+    gradePF: gradePF, aggrInfo: aggrInfo, realAlts: realAlts, realScore: realScore, engWhy: engWhy, tailHtml: tailHtml, realAllIn: realAllIn, realIdeal: realIdeal, realScenario: realScenario, mineCut: mineCut, mineHold: mineHold, mineAction: mineAction, realSpotHtml: realSpotHtml, quietFolds: quietFolds, rangeTxt: rangeTxt, mineWho: mineWho,
     scenarioFree: scenarioFree, cur: function () { return cur; }, setCur: function (s) { cur = s; renderScenario(); },
     pfAsk: pfAsk, verdict: verdict, realVerdict: realVerdict, realOptions: realOptions, optBtns: optBtns,
     dailySpot: dailySpot, dayNum: dayNum, dailyPlan: dailyPlan, dailyTurn: dailyTurn, dailyDeck: dailyDeck, dailyPool: dailyPool, dailyJudge: dailyJudge,

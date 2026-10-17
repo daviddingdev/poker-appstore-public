@@ -1737,6 +1737,38 @@ console.log('NEW-4 / NF-COPY-7: the decision street’s row keeps your own check
     'the ' + trimmed + ' rows ending in the faced bet print the clauses before it ("River BB checks" over "River: HJ bets 4.5bb"); the ' + whole + ' with a fold after it stay whole' + (bad.length ? ' — ' + bad.join(' | ') : ''));
 }
 
+console.log('the rows say only the folds of players who were in the hand (the owner, 2026-10-16)');
+{
+  // "HJ folds · CO folds · BTN folds · SB folds" before the action came round took two lines and said
+  // nothing. A fold stays only from a player who had already called, bet, raised or checked.
+  const T = window.StudyUI._test, fs = require('fs');
+  const spots = JSON.parse(fs.readFileSync(path.join(APP, 'realspots.json'), 'utf8')), hands = JSON.parse(fs.readFileSync(path.join(APP, 'realhands.json'), 'utf8'));
+  const decs = []; hands.forEach(h => h.decisions.forEach((d, i) => decs.push(T.handAt(h, i).e)));
+  const rowText = (html, st) => { const m = new RegExp('min-width:54px">' + st + '</span> ([^<]*)</div>').exec(html); return m ? m[1] : null; };
+  let dropped = 0, keptFolds = 0, idleShown = 0; const bad = [];
+  spots.concat(decs).forEach(e => {
+    const q = T.quietFolds(e.line), seen = {};
+    ['preflop', 'flop', 'turn', 'river'].forEach(st => {
+      if (e.line[st] == null) return;
+      const raw = String(e.line[st]).split(' · '), kept = String(q[st]).split(' · ');
+      raw.forEach(a => {
+        const m = /^(\w+) (\w+)/.exec(a.trim()); if (!m) return;
+        if (m[2] === 'folds') { if (seen[m[1]]) keptFolds++; else dropped++; } else seen[m[1]] = true;
+      });
+      if (kept.length !== raw.filter(a => { const m = /^(\w+) (\w+)/.exec(a.trim()); return !m || m[2] !== 'folds' || kept.indexOf(a) >= 0; }).length && bad.length < 3) bad.push(st + ': ' + e.line[st] + ' → ' + q[st]);
+    });
+    const pre = rowText(T.realSpotHtml({ e }), 'Preflop');
+    if (pre && pre.split(' · ').some(a => { const m = /^(\S+) folds$/.exec(a.trim()); return m && !/(calls|raises|bets|checks|limps|completes)/.test(pre.slice(0, pre.indexOf(a))); })) idleShown++;
+  });
+  const e86 = spots.find(e => e.id === '86/73:river:BB' && e.decision === 'fcr'), h86 = T.realSpotHtml({ e: e86 }).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const limp = T.quietFolds({ preflop: 'UTG folds · MP folds · CO folds · BTN folds · SB calls · BB checks' }).preflop;
+  const later = T.quietFolds({ preflop: 'UTG calls · CO bets 3 · SB folds · BB calls · UTG folds', flop: 'CO bets 4 · BB folds' });
+  ok(dropped > 5000 && !idleShown && !bad.length && /Preflop HJ raises to 2\.3 · BB calls Flop/.test(h86) && !/UTG–LJ folds|SB folds/.test(h86) &&
+    limp === 'SB calls · BB checks' && later.preflop === 'UTG calls · CO bets 3 · BB calls · UTG folds' && later.flop === 'CO bets 4 · BB folds',
+    'the ' + dropped + ' folds of players who never put chips in are left out (86/73 reads "HJ raises to 2.3 · BB calls"); a fold after a call, a bet or a check stays (' + keptFolds + ')' + (bad.length ? ' — ' + bad.join(' | ') : ''));
+  ok(e86.line.preflop === 'UTG folds · MP bets 2.3 · CO folds · BTN folds · SB folds · BB calls', 'and the pool\'s own line is untouched (the engine reads it whole)');
+}
+
 console.log('the own-hand replay reads past a result in the wrong unit, as Log does (the final skeptic, round 2)');
 {
   // '| -100bb' in a cash hand isn't lifted on save (LOG-1); Log reads the line without it
