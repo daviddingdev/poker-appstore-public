@@ -117,4 +117,4 @@ wrapped for the App Store. Test suite runs against a headless browser with a fak
 backend that can be told to evict at any point, which is how the reclamation paths above
 are actually exercised.
 
-_Last updated October 2026._
+_Last updated November 2026._
