@@ -21,6 +21,12 @@
     return '<span class="pc"><b>' + esc(r) + '</b><span class="suit-' + s + '">' + SU[s] + '</span></span>';
   }
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  // Every locked tap opens the Pro screen on what was tapped (app-ui openPro: 'drills' or
+  // 'charts'); run standalone (the study suite), the plain tab.
+  function goPro(from) {
+    if (typeof window.openPro === 'function') window.openPro(from);
+    else if (window.showTab) window.showTab('Pro');
+  }
 
   /* ---------- persisted drill stats ---------- */
   function freshStats() { return { v: 2, att: 0, cor: 0, mix: 0, streak: 0, best: 0, byMode: {}, byDepth: {}, misses: [], mode: 'pf' }; }
@@ -1429,7 +1435,30 @@
     var d = Math.min(bt.getBoundingClientRect().bottom - (navTop - 8), pt - top - 8);
     if (d > 0) window.scrollBy(0, Math.ceil(d));
   }
+  // After an answer, the verdict and its reason take the buttons' place, and Next hand landed under
+  // the tab bar: on an SE after every spot, on a 6.1" phone after a small-blind spot's longer reason
+  // (1.1 review). Nothing on screen said how to go on. Lift it clear the same way, never so far
+  // that the spot's first line goes under the header.
+  function keepNextInView() {
+    var nx = $('drillNext'), sp = $('drillSpot'), p = sp && sp.closest ? sp.closest('.panel') : null;
+    if (!nx || !p || !nx.getBoundingClientRect || !p.getBoundingClientRect || p.offsetParent === null || typeof window.scrollBy !== 'function') return;
+    var q = typeof document.querySelector === 'function' ? function (s) { return document.querySelector(s); } : function () { return null; };
+    var nav = q('nav'), hd = q('header');
+    if (!nav || !nav.getBoundingClientRect) return;
+    var navTop = nav.getBoundingClientRect().top;
+    if (!navTop) return;                                  // tab bar hidden (keyboard up)
+    var top = hd && hd.getBoundingClientRect ? hd.getBoundingClientRect().bottom : 0;
+    var d = Math.min(nx.getBoundingClientRect().bottom - (navTop - 8), p.getBoundingClientRect().top - top - 8);
+    if (d > 0) window.scrollBy(0, Math.ceil(d));
+  }
   function nextSpot() { newScenario(); keepSpotInView(); }
+  // keepNextInView can lift Next hand to where the answer button just was, so a double tap on an
+  // answer skipped its verdict (1.1 code review). A real tap that lands within NEXT_SETTLE_MS of the
+  // answer is let go by, as Home's Today's hand does (DAILY_SETTLE_MS, app-home.js); a script's
+  // click (a test, a capture) goes straight on.
+  var NEXT_SETTLE_MS = 800, answeredAt = 0;
+  function settled(ev) { return !(ev && ev.isTrusted === true && Date.now() - answeredAt < NEXT_SETTLE_MS); }
+  function onNext(ev) { if (settled(ev)) nextSpot(); }
   function newScenario() {
     if (pendingChain) { cur = pendingChain; pendingChain = null; renderScenario(); return; }
     if (Math.random() < MINE_RATE) {
@@ -2041,8 +2070,10 @@
       '<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(128,128,128,.25)"><b>What actually happened:</b> ' + story +
       '. <span class="dim">The result isn’t the answer — just the real spot.</span></div></div>' +
       '<button class="btn next" id="drillNext">Next hand</button>';
-    $('drillNext').onclick = nextSpot;
+    $('drillNext').onclick = onNext;
     renderStats();
+    answeredAt = Date.now();
+    keepNextInView();
   }
 
   // Full-hand decision: grade your action vs the engine's baked take, reveal what the
@@ -2069,15 +2100,17 @@
         '. <span class="dim">You walked the real hand — the engine take was the lesson, the result is just how it went.</span></div></div>' +
         '<button class="btn next" id="drillNext">Next hand</button>';
       fb.innerHTML = body;
-      $('drillNext').onclick = nextSpot;
+      $('drillNext').onclick = onNext;
     } else {
       var nd = hand.decisions[di + 1], nextLabel = nd.street !== d.street ? 'See the ' + nd.street + ' →' : 'Continue →';
       body += ' <span class="dim">The hand follows reality — next decision uses what actually happened.</span></div></div>' +
         '<button class="btn next" id="drillNext">' + nextLabel + '</button>';
       fb.innerHTML = body;
-      $('drillNext').onclick = function () { cur = handAt(hand, di + 1); renderScenario(); keepSpotInView(); };
+      $('drillNext').onclick = function (ev) { if (!settled(ev)) return; cur = handAt(hand, di + 1); renderScenario(); keepSpotInView(); };
     }
     renderStats();
+    answeredAt = Date.now();
+    keepNextInView();
   }
 
   // The verdict on an answer: {cls, head, sub}. The drill puts sub under the head (fbsub); Home's
@@ -2168,14 +2201,16 @@
       (g.plainHead && cls === 'bad' && s.kind === 'open' && typeof window.openGuide === 'function'
         ? '<p class="mini fbguide">Why: <button class="linkish" data-guide="learn-hands.html">Which hands to play →</button></p>' : '') +
       '<button class="btn next" id="drillNext">' + nextTxt + '</button>';
-    $('drillNext').onclick = nextSpot;
+    $('drillNext').onclick = onNext;
     fb.onclick = function (ev) {
       if (!ev.target.closest) return;
       var gd = ev.target.closest('[data-guide]');
       if (gd) return window.openGuide(gd.dataset.guide, 'Which hands to play');
-      if (ev.target.closest('[data-pro]') && window.showTab) window.showTab('Pro');
+      if (ev.target.closest('[data-pro]')) goPro('drills');
     };
     renderStats();
+    answeredAt = Date.now();
+    keepNextInView();
   }
 
   // Record each answer to the synced db (db.drills) for later pattern analysis.
@@ -2753,7 +2788,7 @@
       price + '. The 100bb chart for raising first in stays free, and so does the preflop drill that quizzes you on it.</p>' +
       '<div class="emptycta"><button id="cardLockGo">See what Pro adds</button></div></div>';
     $('cardMeta').innerHTML = '';
-    var go = $('cardLockGo'); if (go) go.onclick = function () { if (window.showTab) window.showTab('Pro'); };
+    var go = $('cardLockGo'); if (go) go.onclick = function () { goPro('charts'); };
   }
 
   /* ====================== TODAY'S HAND (Home) ======================
@@ -3000,7 +3035,9 @@
   // The same, inside a sentence: "it's a raise", "it's all-in".
   function dailyIt(s, a, pro) {
     if (dailyAllIn(s, a)) return pro ? 'a jam' : 'all-in';
-    return (a === 'open' ? 'a raise' : a === 'threebet' ? (pro ? 'a 4-bet' : 'a 4-bet (raise again)') : 'a ' + a);
+    // Free says a limp in words, as Cards' free legend does: "it's a limp" was bare (1.1 review).
+    return (a === 'open' ? 'a raise' : a === 'threebet' ? (pro ? 'a 4-bet' : 'a 4-bet (raise again)')
+      : a === 'limp' && !pro ? 'a limp (just calling the big blind)' : 'a ' + a);
   }
   // The lesson: the seat or the stack that turns the answer. "From the button it's a raise."
   function dailyTurnLine(s, tn, pro) {
@@ -3033,26 +3070,28 @@
   function dailyReason(t, ideal) {
     var L = t.label, pc = function (x) { return Math.round(x * 100); }, nash = 'The ' + T('nash', 'all-in chart');
     if (t.kind === 'calljam') return nash + (ideal === 'call' ? ' calls with this hand here' : ' folds this hand here') + ' (it calls with about ' + pc(callJamWidth(t.pos, t.depth)) + '% of hands).';
+    // Each share says what the chart does with it ("it raises about 48% of hands"): a bare
+    // "(about 71% of hands)" read like the hand's chance of winning (1.1 review).
     if (t.kind === 'open' && t.depth <= 12) {
       var j = pc(P.openEval(t.pos, t.depth, L).t);
-      return ideal === 'open' ? nash + ' goes all-in with this hand from here (about ' + j + '% of hands).'
+      return ideal === 'open' ? nash + ' goes all-in with this hand from here (it goes all-in with about ' + j + '% of hands).'
         : nash + ' folds this hand from here (it goes all-in with about ' + j + '% of hands).';
     }
     if (t.kind === 'open' && t.pos === 'SB') {
       var sb = P.sbEval(t.depth, L), rt = pc(sb.raiseT), lt = pc(sb.limpT);
-      return ideal === 'open' ? 'The chart raises this hand from the small blind (about ' + rt + '% of hands).'
-        : ideal === 'limp' ? 'The chart limps this hand (it raises about ' + rt + '% of hands and plays about ' + lt + '%).'
+      return ideal === 'open' ? 'The chart raises this hand from the small blind (it raises about ' + rt + '% of hands).'
+        : ideal === 'limp' ? 'The chart limps this hand: it just calls the big blind (it raises about ' + rt + '% of hands and plays about ' + lt + '%).'
           : 'The chart folds this hand from the small blind (it plays about ' + lt + '% of hands).';
     }
     if (t.kind === 'open') {
       var o = pc(P.openEval(t.pos, t.depth, L).t);
-      return ideal === 'open' ? 'The chart raises this hand from here (about ' + o + '% of hands).'
+      return ideal === 'open' ? 'The chart raises this hand from here (it raises about ' + o + '% of hands).'
         : 'The chart folds this hand from here (it raises about ' + o + '% of hands).';
     }
     var on = pc(dailyOnWidth(t.depth, t.pos3)), up = pc(dailyOnWidth(t.depth, t.pos3, true));
     return ideal === 'call' ? 'The chart calls the re-raise with this hand (it plays on with about ' + on + '% of hands).'
       : ideal === 'fold' ? 'The chart folds this hand to the re-raise (it plays on with about ' + on + '% of hands).'
-        : (t.depth >= 30 ? 'The chart raises again (4-bets) with this hand' : 'The chart goes all-in over the re-raise with this hand') + ' (about ' + up + '% of hands).';
+        : (t.depth >= 30 ? 'The chart raises again (4-bets) with this hand (it raises again with about ' : 'The chart goes all-in over the re-raise with this hand (it goes all-in with about ') + up + '% of hands).';
   }
   // What Home draws for a spot, in the tier's words; with an answer, its grade too. Pure. Free: plain
   // words, the drill's buttons ("All-in" for Jam), "The app's answer", one plain reason, the seat or stack
@@ -3113,7 +3152,7 @@
       // never a dead control.
       if (spotLocked()) {
         var lockedTap = e.target.closest && (e.target.closest('[data-a]') || e.target.closest('[data-mine]'));
-        if (lockedTap && window.showTab) window.showTab('Pro');
+        if (lockedTap) goPro('drills');
         return;
       }
       var m = e.target.closest && e.target.closest('[data-mine]');
@@ -3126,7 +3165,7 @@
     newScenario();
     $('cardRef').innerHTML = refHtml();
     $('cardRef').onclick = function (e) {
-      if (e.target.closest && e.target.closest('[data-pro]') && window.showTab) window.showTab('Pro');
+      if (e.target.closest && e.target.closest('[data-pro]')) goPro('charts');
     };
     renderCard();
   }
@@ -3160,15 +3199,24 @@
     // Home's today's hand (app-home renderDaily): the pick and the words; Home keeps the answer.
     daily: { ready: dailyReady, spot: dailySpot, view: dailyView },
     // Home's "Keep going in Study": the Drill segment, and on the free tier a spot that answers.
-    openDrill: function () {
+    // Start here's "Practice raise or fold" (pf true) asks for Preflop on Pro too.
+    openDrill: function (pf) {
       initOnce();
       var d = document.querySelector && document.querySelector('#segStudy [data-v="drill"]');
       if (d && !d.classList.contains('on') && d.click) d.click();
-      if (!cardPro() && mode !== 'pf' && dataReady()) {   // exactly what a Preflop mode-chip tap does
+      if ((pf || !cardPro()) && mode !== 'pf' && dataReady()) {   // exactly what a Preflop mode-chip tap does
         mode = 'pf'; stats.mode = 'pf'; saveStats(); pendingChain = null;
         renderModeSel(); newScenario(); renderStats();
       }
       keepSpotInView();
+    },
+    // Home's Start here, "Starting-hand charts": the Cards segment on the free chart, first in at
+    // 100bb (the seat stays the one last picked), on both tiers.
+    openChart: function () {
+      initOnce();
+      var c = document.querySelector && document.querySelector('#segStudy [data-v="card"]');
+      if (c && !c.classList.contains('on') && c.click) c.click();
+      if (dataReady()) { cDepth = 100; cSit = 'open'; cTouched = false; renderCard(); }
     },
     // The shell calls this after it opens Study on the Drill, once the page is laid out.
     keepInView: function () { var d = $('studyDrill'); if (d && !d.hidden) keepSpotInView(); },
@@ -3189,7 +3237,7 @@
         if (fb.hidden) { if (cur.free) renderScenario(); }
         else if (/class="mini fbcap"/.test(fb.innerHTML)) {
           fb.innerHTML = fb.innerHTML.replace(/<p class="mini fbcap">[\s\S]*?<\/p>/, '');
-          var nx = $('drillNext'); if (nx) nx.onclick = nextSpot;
+          var nx = $('drillNext'); if (nx) nx.onclick = onNext;
         }
       }
     },
@@ -3211,7 +3259,7 @@
     scenarioFree: scenarioFree, cur: function () { return cur; }, setCur: function (s) { cur = s; renderScenario(); },
     pfAsk: pfAsk, verdict: verdict, realVerdict: realVerdict, realOptions: realOptions, optBtns: optBtns,
     dailySpot: dailySpot, dayNum: dayNum, dailyPlan: dailyPlan, dailyTurn: dailyTurn, dailyDeck: dailyDeck, dailyPool: dailyPool, dailyJudge: dailyJudge,
-    dailyClean: dailyClean, dailyLine: dailyLine, dailyTurns: dailyTurns, dailyActs: dailyActs, dailyHeroes: dailyHeroes, dailyReason: dailyReason, dailyFam: dailyFam,
+    dailyClean: dailyClean, dailyLine: dailyLine, dailyTurns: dailyTurns, dailyActs: dailyActs, dailyHeroes: dailyHeroes, dailyReason: dailyReason, dailyIt: dailyIt, dailyFam: dailyFam,
     opensClean: opensClean, DAILY_FAMS: DAILY_FAMS, DAILY_WEEK: DAILY_WEEK, DAILY_SEATS: DAILY_SEATS, DAILY_DEPTHS: DAILY_DEPTHS, DAILY_HI: DAILY_HI, DAILY_EV_HI: DAILY_EV_HI };
   // Booted straight onto Study (index.html#study, where a standalone guide's "Back to Study"
   // goes): showTab ran in app-boot before this file loaded, so the Drill was never drawn and

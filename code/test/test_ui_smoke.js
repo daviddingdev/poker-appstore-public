@@ -879,6 +879,44 @@ console.log('a mode chip or a filter lifts the new spot’s answers clear of the
   delete document.querySelector; if (was.sb) window.scrollBy = was.sb; else delete window.scrollBy;
 }
 
+console.log('after an answer, Next hand is lifted clear of the tab bar (1.1 review)');
+{
+  // On an SE the verdict and its reason take the answer buttons' place, and Next hand sat at 614–662
+  // under a tab bar at 612: nothing on screen said how to go on. The geometry is that phone's: the
+  // header ends at 60, the drill panel starts at 300, Next ends at 662, the tab bar starts at 612.
+  const panel = { getBoundingClientRect: () => ({ top: 300 }), scrollIntoView() {} };
+  const hdr = { getBoundingClientRect: () => ({ bottom: 60 }) }, nav = { getBoundingClientRect: () => ({ top: 612 }) };
+  const was = { closest: els['drillSpot'].closest, rect: els['drillNext'].getBoundingClientRect, sb: window.scrollBy };
+  els['drillSpot'].closest = sel => sel === '.panel' ? panel : null;
+  let nextBottom = 662;
+  els['drillNext'].getBoundingClientRect = () => ({ bottom: nextBottom });
+  document.querySelector = sel => sel === 'header' ? hdr : sel === 'nav' ? nav : null;
+  let lifts = [];
+  window.scrollBy = (x, y) => lifts.push(y);
+  const answerOne = () => {
+    const acts = [...els['drillBtns']._html.matchAll(/data-a="(\w+)"/g)].map(m => m[1]);
+    lifts = []; els['drillBtns'].onclick(ev(['a', acts[0] || 'fold'])); return lifts.join();
+  };
+  els['drillMode'].onclick(ev(['m', 'pf']));
+  // 662 − (612 − 8) = 58: Next ends 8px above the tab bar.
+  ok(answerOne() === '58', 'a preflop answer lifts Next hand 58px, to 8px above the tab bar (' + (lifts.join() || 'no lift') + ')');
+  els['drillNext'].onclick();
+  panel.getBoundingClientRect = () => ({ top: 80 });
+  ok(answerOne() === '12', 'never so far that the spot’s first line goes under the header: 80 − 60 − 8 = 12 (' + (lifts.join() || 'no lift') + ')');
+  els['drillNext'].onclick();
+  panel.getBoundingClientRect = () => ({ top: 300 }); nextBottom = 560;
+  ok(answerOne() === '', 'and a Next hand already in view moves nothing');
+  // Lifted, Next can sit where the answer button was: a real tap that lands on it within 800 ms of
+  // the answer is the answer's own second tap, and goes by (1.1 code review). A script's call goes on.
+  els['drillNext'].onclick({ isTrusted: true });
+  ok(els['drillFb'].hidden === false, 'a real tap on Next hand right after the answer is let go by, so a double tap can’t skip the verdict');
+  els['drillNext'].onclick();
+  ok(els['drillFb'].hidden === true, 'and Next hand still deals the next spot');
+  els['drillSpot'].closest = was.closest;
+  if (was.rect) els['drillNext'].getBoundingClientRect = was.rect; else delete els['drillNext'].getBoundingClientRect;
+  delete document.querySelector; if (was.sb) window.scrollBy = was.sb; else delete window.scrollBy;
+}
+
 console.log('cards hold lookups, library holds reading');
 {
   // Owner's rule: Cards is what you want in FRONT of you mid-hand; anything you READ goes to
@@ -2040,7 +2078,7 @@ console.log('today’s hand: the daily pick (Home, 2026-10-13: one hard preflop 
     T.dailyActs(s).forEach(a => {
       const v = SD.view(s, a), right = a === x.ideal; nViews++;
       fr[a] = v.r + v.ideal;
-      const it = i => i === 'open' ? (tn.s.kind === 'open' && tn.s.depth <= 12 ? 'all-in' : 'a raise') : i === 'threebet' ? (tn.s.depth >= 30 ? 'a 4-bet (raise again)' : 'all-in') : 'a ' + i;
+      const it = i => i === 'open' ? (tn.s.kind === 'open' && tn.s.depth <= 12 ? 'all-in' : 'a raise') : i === 'threebet' ? (tn.s.depth >= 30 ? 'a 4-bet (raise again)' : 'all-in') : i === 'limp' ? 'a limp (just calling the big blind)' : 'a ' + i;
       const turn = tn.by === 'depth' ? 'At ' + tn.s.depth + ' big blinds it’s ' + it(tn.ideal) + '.'
         : s.kind === 'vs3bet' ? (tn.s.pos3 === 'ip' ? 'In position' : 'Out of position') + ' it’s ' + it(tn.ideal) + '.'
           : s.kind === 'calljam' ? 'Against ' + SEATW[tn.s.pos] + ' it’s ' + it(tn.ideal) + '.' : 'From ' + SEATW[tn.s.pos] + ' it’s ' + it(tn.ideal) + '.';

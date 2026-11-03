@@ -44,6 +44,22 @@
      when a bright button passes beneath. */
   body::before{content:''; position:fixed; top:0; left:0; right:0; z-index:30;
     height:env(safe-area-inset-top); background:var(--bg)}
+  /* A cold launch's first 1–4 frames had no top inset (f949155: 160 launches). WKWebView answers
+     env(safe-area-inset-top) with 0 until a committed frame has told it the page is viewport-fit=cover,
+     so the title sat over the clock, then dropped 20pt (SE) or 62pt (Pro Max) 30–60 ms later. This
+     covers the page in its own background while the inset reads 0; an inset of 1px or more lifts the
+     cover's bottom edge 10000 times that far, above its top, so it has no height. Its bottom and the
+     header's padding read the same env() in the same style pass, so the frame that drops the cover is
+     the first frame with the inset. It is CSS on purpose: the first paint comes before any of our
+     scripts run. Where the inset is honestly 0 (a Safari tab, an iPhone app on a Mac), the animation
+     lets the page through at 0.5 s, the same bound as Home's boot gate. iOS only (-webkit-touch-callout),
+     so desktop browsers and the Chromium ad captures never generate it. It covers rather than hides:
+     WebKit holds the first frame while html or body is invisible, and the inset waits on that frame. */
+  @supports (-webkit-touch-callout:none){
+    html::after{content:''; position:fixed; top:0; left:0; right:0; z-index:2147483647; background:var(--bg);
+      bottom:calc(10000 * env(safe-area-inset-top, 0px)); animation:insetgate 0s .5s forwards}
+  }
+  @keyframes insetgate{to{visibility:hidden}}
   header{position:sticky; top:0; z-index:16; background:var(--bg)}
   html,body{margin:0; padding:0; background:var(--bg); color:var(--text);
     font:16px/1.45 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
@@ -226,36 +242,236 @@
   #sheet .suits button{font-size:24px}
   #sheetDone{margin-top:10px}
   #toast{position:fixed; left:50%; transform:translateX(-50%); bottom:92px; background:#2c2c31; color:#fff;
-    padding:10px 18px; border-radius:99px; font-size:14px; font-weight:500; z-index:50; box-shadow:0 10px 30px rgba(0,0,0,.5)}
+    padding:10px 18px; border-radius:99px; font-size:14px; font-weight:500; z-index:50; box-shadow:0 10px 30px rgba(0,0,0,.5);
+    width:max-content; max-width:calc(100vw - 32px); pointer-events:none}
+  /* The pill is words only, so it never takes a tap, and it is as wide as its words (left:50% held
+     it to half the screen, so a long one wrapped to four lines). On the Pro screen it sits above the
+     fixed buy button, which it covered after a failed purchase or restore (1.1 review). */
+  body:has(#tab-pro:not([hidden]) #proBuyRow:not([hidden])) #toast{bottom:calc(184px + env(safe-area-inset-bottom))}
   input[type=file]{width:100%; font-size:16px; color:var(--dim)}
   /* The native file control rendered as a light "Choose File / No file chosen" strip; the
      input stays in the page (so the picker works) and a styled label opens it. Needs a
      simulator check: WKWebView draws the picker itself. */
   .visuallyhidden{position:absolute !important; width:1px !important; height:1px !important; margin:-1px; padding:0; border:0; left:0; opacity:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
-  .prohero{text-align:center; padding:26px 18px 20px}
-  .promark svg{width:64px; height:38px; color:var(--accent); display:block; margin:0 auto 10px}
-  .protitle{font-size:26px; font-weight:750; letter-spacing:-.025em; margin:0}
-  .proprice{margin:6px 0 16px; color:var(--dim); font-size:15px}
-  .proprice b{font-family:var(--num); font-size:30px; font-weight:750; color:var(--text); letter-spacing:-.02em; margin-right:4px}
-  /* The pitch's first Unlock, under the price: the list below runs a screen or two on every phone. */
-  #proBuyTop{margin:0 0 18px}
-  .prolist{list-style:none; margin:0 0 18px; padding:0; text-align:left}
-  .prolist li{padding:11px 0 11px 30px; border-top:1px solid var(--line); position:relative}
-  .prolist li::before{content:'✓'; position:absolute; left:4px; top:11px; color:var(--accent); font-weight:700}
-  .prolist b{display:block; font-size:15.5px} .prolist span{display:block; color:var(--dim); font-size:13.5px; line-height:1.45; margin-top:2px}
+  /* ---- the Pro screen (1.1, NEXT_VERSIONS §1.1a) ----
+     One screen: the promise, three benefit lines that open their details, the price big, the
+     ownership, anchor and proof lines, and one buy button fixed at the foot, above the tab bar
+     (58pt, nav's buttons) and the home indicator. Teal is that button and nothing else here: the
+     back button, the ticks, the links and the drawn previews are text and greys. */
+  #tab-pro .pushhd .back{color:var(--text)}
+  #proPitch:has(#proBuyRow:not([hidden])){padding-bottom:118px}   /* the last line scrolls clear of the foot */
+  .propromise{font-size:27px; line-height:1.12; font-weight:750; letter-spacing:-.025em; margin:0 4px 14px; text-wrap:balance}
+  .probens{background:var(--card); border-radius:18px; margin-bottom:16px}
+  .proben{border-top:1px solid var(--line)} .proben:first-child{border-top:0}
+  .proben summary{display:flex; align-items:center; gap:13px; padding:11px 12px 11px 13px; min-height:66px; list-style:none; cursor:pointer}
+  .proben summary::-webkit-details-marker{display:none}
+  .proben .pbt{flex:1; min-width:0}
+  .proben .pbt b{display:block; font-size:16px; font-weight:650; letter-spacing:-.01em}
+  .proben .pbt i{display:block; font-style:normal; color:var(--dim); font-size:13px; line-height:1.35; margin-top:1px}
+  .proben .ch{flex:none; color:var(--dim); font-size:18px; transition:transform .15s}
+  .proben[open] .ch{transform:rotate(90deg)}
+  .proben.brief .prolist li + li{display:none}   /* opened by a tap: the tapped line, the rest one tap away */
+  .proben.brief .prolist{padding-bottom:0}
+  /* The tapped line's description pushed the price under the fixed button on 6.1-6.3" phones, with
+     their safe areas, and the ownership line under it on a Pro Max (1.1 review, simulator). Opened by
+     a tap, the line shows its title; "Show all" brings back every line with its words. */
+  .proben.brief .prolist li > span{display:none}
+  #tab-pro .pbmore{display:block; margin:-10px 14px 4px 38px; padding:10px 0; min-height:44px; font-size:14px; text-align:left}
+  #tab-pro .proben:not(.brief) .pbmore{display:none}
+  @media (prefers-reduced-motion: reduce){ .proben .ch{transition:none} }
+  .prolist{list-style:none; margin:0; padding:0 14px 8px; text-align:left}
+  .prolist li{padding:10px 0 10px 24px; border-top:1px solid var(--line); position:relative}
+  .prolist li::before{content:'✓'; position:absolute; left:2px; top:10px; color:var(--dim); font-weight:700}
+  .prolist b{display:block; font-size:15px} .prolist span{display:block; color:var(--dim); font-size:13.5px; line-height:1.45; margin-top:2px}
   .prolist .nowrap{display:inline; margin:0}   /* "re-raise (3-bet)" kept whole inside a line (§9) */
-  /* ---- first run ---- */
+  /* The drawn previews: shapes in neutral greys, $••• where a number would be. Never a value and
+     never a blur (LAUNCH_PLAN §3), so the free view carries nothing it must not have. */
+  .pv{flex:none; width:58px; height:46px; border-radius:10px; background:var(--card2); padding:6px; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden}
+  .pv i,.pv b{display:block; font-style:normal}
+  .pvcard .pvc{display:flex; gap:3px; justify-content:center}
+  .pvcard .pvc i{width:13px; height:18px; border-radius:3px; background:#d9d6cf}
+  .pvcard .pvb{display:flex; gap:3px}
+  .pvcard .pvb i{flex:1; height:8px; border-radius:3px; background:#4a4a52}
+  .pvgrid{display:grid; grid-template-columns:repeat(7,1fr); gap:1px; padding:5px 9px}
+  .pvgrid i{border-radius:1px; background:#34343a}
+  .pvgrid i.on{background:#7d7d86}
+  .pvbars span,.pvboard span{display:flex; align-items:center; gap:3px; height:9px}
+  .pvbars i,.pvboard i{height:6px; border-radius:3px; background:#6b6b74}
+  .pvbars em,.pvboard em{margin-left:auto; font-size:7.5px; line-height:1; color:var(--dim); letter-spacing:-.02em; font-style:normal}
+  .pvboard b{flex:none; width:6px; height:6px; border-radius:99px; background:#8a8a93}
+  .proprice{margin:0 4px; display:flex; align-items:baseline; gap:4px 9px; flex-wrap:wrap}
+  .proprice b{font-family:var(--num); font-size:38px; line-height:1.1; font-weight:750; letter-spacing:-.02em; color:var(--text)}
+  .proprice span{color:var(--dim); font-size:15px}
+  .proown{margin:4px 4px 0; font-size:13.5px; line-height:1.45; color:var(--text)}
+  .proanchor{margin:12px 4px 0; font-size:13.5px; line-height:1.45; color:var(--dim)}
+  .proproof{margin:4px 4px 0; font-size:13.5px; line-height:1.45; color:var(--dim)}
+  .profreego{margin:12px 4px 0; font-size:14px}
+  #tab-pro .linkish{color:var(--text); text-decoration-color:var(--dim)}
+  .profree{margin:12px 4px 0; line-height:1.5}
+  #proBuyNote{margin:14px 4px 0}
+  #proCodePanel{margin-top:14px}
+  /* Down to the screen's edge, under the tab bar's layer (20): the bar is translucent, and over the
+     foot it shows the page's ground, not the lines scrolling behind the button. */
+  .profoot{position:fixed; left:0; right:0; bottom:0; z-index:19;
+    padding:14px max(12px, calc((100% - var(--maxw)) / 2 + 12px)) calc(58px + env(safe-area-inset-bottom));
+    background:linear-gradient(to bottom, rgba(13,13,15,0), var(--bg) 14px)}
+  .profoot .btn{min-height:52px}
+  #tab-pro .profoot .linkish{display:block; margin:2px auto 0; padding:12px 16px; min-height:44px; color:var(--dim); font-size:14px}
+  body.typing .profoot{display:none}
+  /* ---- the PRO pill by the gear (free tier only), and Home's Pro card (1.1) ----
+     The pill is a 44pt button around a small accent pill; on the Pro screen itself it steps away
+     (the buy button is that screen's only teal). */
+  .propill{background:none; border:0; padding:0; margin:-8px -6px -8px 0; min-width:44px; min-height:44px; display:flex; align-items:center; justify-content:center}
+  .propill span{display:block; background:var(--accent); color:#101114; font-size:11px; font-weight:800; letter-spacing:.07em; line-height:1; padding:5px 8px 5px 9px; border-radius:99px}
+  body:has(#tab-pro:not([hidden])) .propill{visibility:hidden}
+  /* A 320pt screen (Display Zoom on an SE) has no room for the count beside the pill and the gear:
+     "sample data" wrapped the title onto two lines. The free player's count gives way to the pill. */
+  @media (max-width:359px){ header:has(#navPro:not([hidden])) #count{display:none} }
+  /* Short screens (an SE, Display Zoom): the Pro screen tightens so more of it sits above the foot. */
+  @media (max-height:700px){
+    .propromise{font-size:23px; margin-bottom:10px}
+    .proben summary{min-height:56px; padding-top:7px; padding-bottom:7px}
+    .proben .pbt b{font-size:15px}
+    .proben .pbt i{font-size:12.5px}
+    .pv{width:50px; height:40px; padding:5px}
+    .proprice b{font-size:32px}
+    .probens{margin-bottom:12px}
+  }
+  .procard{display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid transparent; border-radius:18px;
+    padding:12px 8px 12px 15px; margin-bottom:10px; cursor:pointer}
+  .procard .pcmain{flex:1; min-width:0}
+  .procard .pcmain b{display:block; font-size:15.5px; font-weight:650; letter-spacing:-.01em}
+  .procard .pcmain i{display:block; font-style:normal; color:var(--dim); font-size:13px; line-height:1.35; margin-top:1px}
+  .procard .pcp{display:block; color:var(--text); font-size:13px; font-weight:600; margin-top:3px}
+  .procard .pcgo{flex:none; min-height:44px; padding:0 14px; border-radius:12px; background:none; color:var(--accent);
+    border:1.5px solid rgba(var(--accent-rgb),.6); font-size:15px; font-weight:650}
+  .procard.moment{border-color:rgba(var(--accent-rgb),.45); background:rgba(var(--accent-rgb),.07); padding-right:0}
+  .procard .pcx{flex:0 0 40px; align-self:stretch; min-height:44px; background:none; border:0; color:var(--dim); font-size:22px; line-height:1; margin-left:-4px}
+  /* The Pro screen on the tallest phones (the Plus and Pro Max, 900pt and more): the screen was
+     drawn to fit 390x844 with nothing to scroll, which left ~120pt of empty dark above the fixed
+     button on a Pro Max. The rows, previews, price and lines grow into it (David, 2026-11-01:
+     "make sure we use the pro sizing"); the button stays where it is. */
+  @media (min-height:900px){
+    .propromise{font-size:31px; margin-bottom:18px}
+    .proben summary{min-height:80px; padding:14px 14px 14px 15px; gap:15px}
+    .proben .pbt b{font-size:17.5px}
+    .proben .pbt i{font-size:14.5px}
+    .pv{width:68px; height:54px; padding:7px}
+    .proprice b{font-size:46px}
+    .proprice span{font-size:16.5px}
+    .proown,.proanchor,.proproof{font-size:15px}
+    .profreego{font-size:15.5px}
+  }
+  /* ---- first run: three picture cards (1.1) ----
+     A picture, one headline and one line each (app-boot.js SLIDES). The pictures wear the looks of
+     the screens they show (Home's felt for Today's hand, Cards' grid, the readback, the Table's
+     payments), copied here under #intro, so a rule for Home or Study never moves a picture and a
+     picture never moves them. Each card fits a 320×568 phone; one that can't fades at its foot. */
   #intro{position:fixed; inset:0; z-index:100; background:var(--bg); display:flex; flex-direction:column;
     padding:calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom))}
-  #intro .introtop{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch}
+  #intro .introtop{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column}
   #intro .introtop.more{-webkit-mask-image:linear-gradient(to bottom, #000 calc(100% - 44px), transparent); mask-image:linear-gradient(to bottom, #000 calc(100% - 44px), transparent)}
-  #intro h2{font-size:30px; line-height:1.12; font-weight:700; letter-spacing:-.025em; margin:8px 0 14px}
-  #intro p{color:var(--dim); font-size:16px; line-height:1.5; margin:0 0 14px}
-  #intro b{color:var(--text)}
-  #intro .introex{background:var(--card); border:1px solid transparent; border-radius:16px; padding:14px; margin:0 0 14px}
-  #intro .introex code{display:block; font-size:15px; color:var(--accent); word-break:break-word; line-height:1.6}
-  #intro .introex .arrow{color:var(--dim); font-size:13px; font-weight:500; margin:10px 0 4px}
-  #intro .introex .plain{color:var(--text); font-size:14.5px; line-height:1.5}
+  /* Centred in the room the phone has. Taller than the room, the auto margins go to 0: it starts at
+     the top and scrolls under the fade, never cut off above. */
+  #intro .islide{margin:auto 0; flex:none; width:100%; max-width:440px; align-self:center}
+  #intro .islide>h2{font-size:clamp(24px, 7.4vw, 30px); line-height:1.12; font-weight:700; letter-spacing:-.025em; margin:0 0 10px; text-wrap:balance}
+  #intro .islide>p{color:var(--dim); font-size:16px; line-height:1.5; margin:0}
+  #intro .ipic{margin:0 0 22px; pointer-events:none; -webkit-user-select:none; user-select:none}
+  /* 1. Today's hand on its felt (Home's #homeDaily). */
+  #intro .ifelt{border-radius:20px; padding:13px 15px 15px; color:#eef5f0;
+    background:radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,.10), rgba(255,255,255,0) 60%),
+      radial-gradient(140% 120% at 50% 0%, #1d6a48 0%, #155a3c 40%, #0f4430 75%, #0c3727 100%);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.06), inset 0 -18px 30px rgba(0,0,0,.18), 0 4px 16px rgba(0,0,0,.4)}
+  #intro .ifelt .dspot{font-size:14px; text-align:center; line-height:1.4; text-wrap:balance}
+  #intro .ifelt .dspot b{color:#fff}
+  #intro .ifelt .dhand{display:flex; flex-direction:column; align-items:center; margin:10px 0}
+  #intro .ifelt .hole{display:flex; gap:8px; justify-content:center}
+  #intro .ifelt .pc{display:inline-flex; align-items:center; gap:1px; font-family:var(--num); font-weight:800; font-size:clamp(24px, 7vw, 30px);
+    padding:6px 10px; background:var(--face); color:var(--face-ink); border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,.45), inset 0 -2px 0 rgba(0,0,0,.07)}
+  #intro .ifelt .pc .suit-s{color:var(--face-ink)} #intro .ifelt .pc .suit-h{color:var(--face-h)}
+  #intro .ifelt .pc .suit-d{color:var(--face-d)} #intro .ifelt .pc .suit-c{color:var(--face-c)}
+  #intro .ifelt .dq{text-align:center; font-size:13px; color:rgba(238,245,240,.74); margin:8px 0 0}
+  #intro .ifelt .dbtns{display:flex; gap:10px}
+  #intro .ifelt .act{flex:1; display:flex; align-items:center; justify-content:center; min-height:44px; border-radius:14px;
+    font-size:17px; font-weight:700; background:var(--card2); color:var(--text)}
+  #intro .ifelt .act.raise{background:var(--accent); color:#14161b}
+  /* The two answers take a tap (app-boot.js introAnswer); the rest of the picture stays inert. The
+     answer marks the tapped one and says the chart's verdict where the question was, brighter. */
+  #intro .ifelt .act[data-ia]{pointer-events:auto; cursor:pointer; -webkit-tap-highlight-color:transparent}
+  #intro .ifelt .act.picked{box-shadow:0 0 0 2.5px #fff}
+  #intro .ifelt .dq.ans{color:#fff; font-weight:600; text-wrap:balance}   /* the size stays each step's .dq size */
+  /* 2. Cards: the stack chips over the 13×13 grid (Study's .sel, .grid13, .lg). The chips take the
+     card's width (on a 320pt phone, narrower ones put the lock over "bb"); the grid is sized to the
+     phone's height. */
+  #intro .ichart{background:var(--card); border-radius:18px; padding:12px; max-width:340px; margin:0 auto}
+  #intro .ichart .sel{flex-wrap:nowrap; gap:4px; margin:0 0 8px}
+  #intro .ichart .sel span{flex:1; position:relative; text-align:center; padding:6px 0; border-radius:8px; background:var(--card2);
+    color:var(--dim); font-size:11.5px; font-weight:600}
+  #intro .ichart .sel span.on{color:var(--accent); background:rgba(var(--accent-rgb),.16)}
+  #intro .ichart .sel .lkic{position:absolute; top:3px; right:4px; width:6px; height:8px; opacity:.7}
+  #intro .ichart .grid13{width:min(100%, 36vh, 280px); gap:1.5px; margin:0 auto 8px}
+  #intro .ichart .g13{border-radius:2px; font-size:0}
+  #intro .ichart .lg{justify-content:center; margin:0; font-size:11.5px}
+  #intro .ichart .lg .k{width:10px; height:10px}
+  /* 3. The readback (the form's .readback) and the night's payments (the Table's lines). */
+  #intro .ipanel{background:var(--card); border-radius:16px; padding:11px 13px 12px}
+  #intro .ipanel+.ipanel{margin-top:10px}
+  #intro .ik{font-size:12px; font-weight:600; color:var(--dim); margin:0 0 6px}
+  #intro .ipanel .readback{margin:0}
+  #intro .ipanel p{margin:4px 0 0; font-size:14.5px; line-height:1.4; color:var(--text)}
+  /* The 4-inch SE (568pt, 20 of them status bar): a little less air, so SF Pro's wider lines still fit. */
+  @media (max-height:600px){ #intro .ipic{margin-bottom:16px} #intro .islide>h2{margin-bottom:8px} #intro .islide>p{font-size:15px; line-height:1.45}
+    #intro .ichart .grid13{width:min(100%, 34vh)} }
+  /* Big phones (the 6.1" iPhones and up, 780pt tall and more) get bigger cards rather than more
+     empty dark: the pictures, the playing cards, the chart and the lines all grow, so a card fills
+     the room a Pro Max has instead of floating in its middle third (David, 2026-11-01: "make sure
+     we use the pro sizing"). The SE keeps the sizes above. */
+  @media (min-height:780px){
+    #intro .islide{max-width:480px}
+    #intro .islide>h2{font-size:clamp(30px, 8.6vw, 38px); margin-bottom:14px}
+    #intro .islide>p{font-size:18.5px; line-height:1.5}
+    #intro .ipic{margin-bottom:30px}
+    #intro .ifelt{padding:20px 20px 22px; border-radius:24px}
+    #intro .ifelt .dspot{font-size:17px}
+    #intro .ifelt .dhand{margin:18px 0}
+    #intro .ifelt .hole{gap:12px}
+    #intro .ifelt .pc{font-size:44px; padding:12px 16px; border-radius:14px}
+    #intro .ifelt .dq{font-size:15px; margin-top:12px}
+    #intro .ifelt .act{min-height:56px; font-size:20px; border-radius:16px}
+    #intro .ichart{max-width:420px; padding:16px; border-radius:22px}
+    #intro .ichart .sel span{font-size:14px; padding:8px 0}
+    #intro .ichart .sel .lkic{width:7px; height:9px}
+    #intro .ichart .grid13{width:min(100%, 44vh, 380px); gap:2px}
+    #intro .ichart .lg{font-size:14px}
+    #intro .ichart .lg .k{width:12px; height:12px}
+    #intro .ipanel{padding:16px 18px 18px; border-radius:20px}
+    #intro .ipanel+.ipanel{margin-top:14px}
+    #intro .ik{font-size:14px; margin-bottom:8px}
+    #intro .ipanel .readback{font-size:17px; padding:12px 14px}
+    #intro .ipanel p{font-size:17.5px; line-height:1.45}
+  }
+  /* And the 6.3" and bigger (860pt and more: the Pro, the Plus, the Pro Max) a step further: card 1's
+     felt and card 3's panels were still half the screen there. Card 2's chart already fills it. */
+  @media (min-height:860px){
+    #intro .islide>h2{font-size:clamp(34px, 9.4vw, 42px)}
+    #intro .islide>p{font-size:19.5px}
+    #intro .ipic{margin-bottom:36px}
+    #intro .ifelt{padding:28px 22px 28px; border-radius:26px}
+    #intro .ifelt .dspot{font-size:19.5px}
+    #intro .ifelt .dhand{margin:26px 0}
+    #intro .ifelt .hole{gap:16px}
+    #intro .ifelt .pc{font-size:60px; padding:16px 22px; border-radius:16px}
+    #intro .ifelt .dq{font-size:16.5px; margin-top:14px}
+    #intro .ifelt .act{min-height:66px; font-size:22px; border-radius:18px}
+    #intro .ipanel{padding:20px 20px 22px; border-radius:22px}
+    #intro .ipanel+.ipanel{margin-top:18px}
+    #intro .ik{font-size:15px; margin-bottom:10px}
+    #intro .ipanel .readback{font-size:19.5px; padding:14px 16px}
+    #intro .ipanel p{font-size:20px; margin-top:6px}
+  }
+  /* "Try today's hand" focuses the card's first answer (VoiceOver lands on it) without drawing a ring
+     round it: a ring on Fold, before anything is answered, read as the app's pick. Gone on blur. */
+  #homeDaily .act.quietfocus:focus{outline:none}
   #intro .dots{display:flex; gap:7px; justify-content:center; padding:14px 0 4px}
   #intro .dots i{width:7px; height:7px; border-radius:99px; background:var(--line); display:block}
   #intro .dots i.on{background:var(--accent)}
@@ -821,12 +1037,14 @@
   #homeDaily .dacts .dcta{flex:1; width:auto}
   #homeDaily .dgopro{flex:none; min-height:46px; padding:0 16px; border-radius:14px; border:1.5px solid rgba(158,240,220,.75); background:none;
     color:#9ff0dc; font:inherit; font-size:15px; font-weight:700}
-  /* Start here (fresh install): three rows in one panel, then two small links. */
+  /* Start here (fresh install): the heading, two small links, then the routes in one panel. */
   #homeRoutes .starthere{padding:12px 14px}
   #homeRoutes .starthere h3{margin:2px 2px 4px}
   #homeRoutes .starthere .big{background:none; margin:0; border-radius:0; padding:11px 2px; border-top:1px solid var(--line)}
   #homeRoutes .starthere .big:first-of-type{border-top:0}
-  #homeRoutes .starthere .shfoot{margin:6px 0 2px; text-align:center}
+  /* Each link's tap box reaches 14px below its words (.linkish), so the routes start 14px down:
+     at 4px a tap on the top edge of "Practice raise or fold" loaded the sample data (code review). */
+  #homeRoutes .starthere .shfoot{margin:0 2px 14px; text-align:left}
   /* Tiles: the month gets the width its two lines need; each line stays one line. */
   #homeTiles{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
   #homeTiles:empty{display:none}
@@ -981,7 +1199,7 @@
 <body>
 <header>
   <h1><svg viewBox="0 0 40 24" aria-hidden="true" fill="currentColor"><rect x="1" y="2" width="16" height="13" rx="5.5"/><rect x="23" y="2" width="16" height="13" rx="5.5"/><rect x="15" y="5.5" width="10" height="3.4" rx="1.7"/><circle cx="31.4" cy="9" r="2.9" fill="var(--bg)"/><circle cx="32.3" cy="8.3" r="1.05" fill="var(--text)"/></svg>Pocket Tells</h1>
-  <span class="hstat"><span id="count"></span><button id="navData" class="gear" aria-label="Settings"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M19.38 10.19 L21.89 10.51 L21.89 13.49 L19.38 13.81 L18.50 15.94 L20.05 17.93 L17.93 20.05 L15.94 18.50 L13.81 19.38 L13.49 21.89 L10.51 21.89 L10.19 19.38 L8.06 18.50 L6.07 20.05 L3.95 17.93 L5.50 15.94 L4.62 13.81 L2.11 13.49 L2.11 10.51 L4.62 10.19 L5.50 8.06 L3.95 6.07 L6.07 3.95 L8.06 5.50 L10.19 4.62 L10.51 2.11 L13.49 2.11 L13.81 4.62 L15.94 5.50 L17.93 3.95 L20.05 6.07 L18.50 8.06Z"/><circle cx="12" cy="12" r="3.2"/></svg></button></span>
+  <span class="hstat"><span id="count"></span><button id="navPro" class="propill" aria-label="Get Pro" hidden><span aria-hidden="true">PRO</span></button><button id="navData" class="gear" aria-label="Settings"><svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M19.38 10.19 L21.89 10.51 L21.89 13.49 L19.38 13.81 L18.50 15.94 L20.05 17.93 L17.93 20.05 L15.94 18.50 L13.81 19.38 L13.49 21.89 L10.51 21.89 L10.19 19.38 L8.06 18.50 L6.07 20.05 L3.95 17.93 L5.50 15.94 L4.62 13.81 L2.11 13.49 L2.11 10.51 L4.62 10.19 L5.50 8.06 L3.95 6.07 L6.07 3.95 L8.06 5.50 L10.19 4.62 L10.51 2.11 L13.49 2.11 L13.81 4.62 L15.94 5.50 L17.93 3.95 L20.05 6.07 L18.50 8.06Z"/><circle cx="12" cy="12" r="3.2"/></svg></button></span>
 </header>
 <main>
 <div id="liveBar" role="button" tabindex="0" hidden></div>
@@ -994,6 +1212,7 @@
   <section id="homeDaily" aria-label="Today’s hand" hidden></section>
   <div class="tiles" id="homeTiles"></div>
   <div id="homeRoutes"></div>
+  <div id="homePro" hidden></div>
 </section>
 
 <!-- ===================== LOG (capture) ===================== -->
@@ -1277,7 +1496,7 @@
       <p class="mini" style="margin-top:0">Free. Short reads for someone who knows the rules and wants to start winning. They stay on the phone and work offline.</p>
       <a class="libitem" href="howto.html">
         <b>How to use Pocket Tells</b>
-        <span>The tour: reading and typing cards, the action shorthand decoded line by line, sessions, amounts, the Study drills and charts, and the flag-to-drill loop.</span>
+        <span>The tour, in pictures: Home and Today’s hand, the drills and charts, settling a home game, logging a hand, Progress, your data and Pro.</span>
         <em>Read →</em>
       </a>
       <a class="libitem" href="learn-position.html">
@@ -1506,14 +1725,15 @@
   <div id="tableBoard" hidden></div>
 </section>
 
-<!-- ===================== PRO (pushed from Study / Progress / Settings) =====================
-     The upgrade screen ROADMAP said deserved the same care as the drill. One purchase, no
-     subscription; the pitch names exactly what is gated and promises the rest free forever.
-     While IAP_READY is false (no App Store purchase wired yet) the buy buttons stay hidden
-     and the test-build note + unlock code are the only path — a buy button that cannot buy
-     is the same sin as a Restore button that restores nothing. Two buy buttons, one purchase:
-     #proBuyTop under the price line, #proBuy after the list with Restore (owner, 2026-10-09:
-     the only one sat a screen or two down on every phone). -->
+<!-- ===================== PRO (pushed from anywhere locked, Home, the header pill, Settings) =====================
+     Rebuilt for 1.1 (NEXT_VERSIONS §1.1a): one screen. A promise line; three benefit lines
+     (#proBens, drawn by renderPro in the order the tap asks for: openPro(from) puts the one it
+     came from first and opens it); the price big; the ownership line; one honest anchor; the
+     proof line; "Everything you log stays free →" opening the free list; and ONE buy button fixed
+     at the foot above the tab bar, Restore small under it. Teal is that button and nothing else.
+     While IAP_READY is false (a web or pre-plugin build) the buy row stays hidden and the test-build
+     note + unlock code are the only path: a buy button that cannot buy is the same sin as a
+     Restore button that restores nothing (App Review 3.1.1 keeps the code out of store builds). -->
 <section id="tab-pro" hidden>
   <div class="pushhd"><button class="back" id="proBack">‹ Back</button><h2>Pro</h2><span></span></div>
   <div class="panel" id="proHave" hidden>
@@ -1521,26 +1741,15 @@
     <p class="prognote" id="proHaveHow"></p>
   </div>
   <div id="proPitch">
-    <div class="panel prohero">
-      <div class="promark"><svg viewBox="0 0 40 24" aria-hidden="true" fill="currentColor"><rect x="1" y="2" width="16" height="13" rx="5.5"/><rect x="23" y="2" width="16" height="13" rx="5.5"/><rect x="15" y="5.5" width="10" height="3.4" rx="1.7"/><circle cx="31.4" cy="9" r="2.9" fill="var(--card)"/><circle cx="32.3" cy="8.3" r="1.05" fill="var(--text)"/></svg></div>
-      <h2 class="protitle">Pocket Tells Pro</h2>
-      <p class="proprice"><b class="proPriceVal">$14.99</b> <span class="nowrap">once: less than one buy-in.</span> <span class="nowrap">No subscription.</span></p>
-      <button class="btn" id="proBuyTop" hidden>Unlock Pro<span class="proPriceAt"> · <span class="proPriceVal">$14.99</span></span></button>
-      <ul class="prolist">
-        <li><b>Every drill</b><span>Postflop spots and full hands to play through, every preflop situation and stack size, and unlimited <span class="nowrap">re-raise (3-bet)</span> spots.</span></li>
-        <li><b>Every chart</b><span>All-in-or-fold and short-stack charts (10–50 big blinds), facing a raise or a re-raise, and when to call an all-in, for every seat, with the notes on facing a <span class="nowrap">re-raise (3-bet).</span></span></li>
-        <li><b>Progress reports</b><span>Your running total, where you actually win (by stakes, by room, by day), whether your hourly can be told apart from break-even yet, what tips cost you, and swings and bankroll worked out from your own sessions.</span></li>
-        <li><b>The full leaderboard</b><span>Every player’s standing across your home-game nights, not just the leader and you.</span></li>
-        <li><b>Your game</b><span>Drill accuracy by street, whether it’s improving, and the spots that keep catching you.</span></li>
-        <li><b>Ranges in the odds calculator</b><span>Put a player on a range instead of two cards: the top so many percent, the hands any seat raises first in, or your own, tapped onto the grid or typed.</span></li>
-        <li><b>The Library</b><span>The nine-chapter course, the concept guides, the playbook and the HORSE (mixed games) cheat sheet.</span></li>
-        <li><b>Family Sharing included</b><span>One purchase covers you and up to five family members.</span></li>
-      </ul>
-      <div id="proBuyRow" hidden><button class="btn" id="proBuy">Unlock Pro<span class="proPriceAt"> · <span class="proPriceVal">$14.99</span></span></button>
-        <button class="linkish" id="proRestore" style="display:block;margin:14px auto 0">Restore purchases</button></div>
-      <p class="mini" id="proBuyNote" hidden>Test build: purchases aren’t switched on yet. If you were given an unlock code, enter it below.</p>
-      <p class="mini" style="margin:14px 0 0">Free forever, with or without Pro: logging, sessions, history, settle-up and nights, the starting-hands chart (100bb) and backups. In Progress, free too: Swings and bankroll, with example or typed-in numbers. In Study, free too: preflop drills on when to raise first, 10 <span class="nowrap">re-raise (3-bet)</span> spots a day, your own flagged hands replayed later with fresh eyes, the odds calculator, and the four beginner guides. Pro runs entirely on this phone, like everything else.</p>
-    </div>
+    <h2 class="propromise"><span class="nowrap">All of Pocket Tells.</span> <span class="nowrap">Yours for good.</span></h2>
+    <div class="probens" id="proBens"></div>
+    <p class="proprice" id="proPrice"><b class="proPriceVal">$14.99</b> <span>once, no subscription</span></p>
+    <p class="proown">Unlocks today · on your devices and for up to 5 family members · never renews · Restore is free</p>
+    <p class="proanchor">Most poker trackers and trainers are subscriptions. This is one payment.</p>
+    <p class="proproof">No account · works offline · nothing leaves this phone.</p>
+    <p class="profreego"><button class="linkish" id="proFreeGo" aria-expanded="false" aria-controls="proFree">Everything you log stays free →</button></p>
+    <p class="mini profree" id="proFree" hidden>Free forever, with or without Pro: logging, sessions, history, settle-up and nights, the starting-hands chart (100bb) and backups. In Progress, free too: Swings and bankroll, with example or typed-in numbers. In Study, free too: preflop drills on when to raise first, 10 <span class="nowrap">re-raise (3-bet)</span> spots a day, your own flagged hands replayed later with fresh eyes, the odds calculator, and the four beginner guides. Pro runs entirely on this phone, like everything else.</p>
+    <p class="mini" id="proBuyNote" hidden>Test build: purchases aren’t switched on yet. If you were given an unlock code, enter it below.</p>
     <div class="panel" id="proCodePanel">
       <h3>Unlock code</h3>
       <label class="lab" for="proCode">Have a code?</label>
@@ -1548,6 +1757,10 @@
       <div class="gap"></div>
       <button class="btn ghost" id="proUnlock">Unlock</button>
       <p class="mini" id="proCodeMsg" hidden></p>
+    </div>
+    <div class="profoot" id="proBuyRow" hidden>
+      <button class="btn" id="proBuy">Unlock Pro<span class="proPriceAt"> · <span class="proPriceVal">$14.99</span></span></button>
+      <button class="linkish" id="proRestore">Restore purchases</button>
     </div>
   </div>
 </section>
