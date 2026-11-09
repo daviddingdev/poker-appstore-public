@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pocket Tells: Poker Companion</title>
+<meta name="description" content="Your poker companion, at the table and between games. Free raise or fold drills, starting-hand charts and an odds calculator. Log hands, replay your own decisions, settle the home game. For iPhone.">
+<meta property="og:title" content="Pocket Tells: Poker Companion">
+<meta property="og:description" content="Your poker companion, at the table and between games. Free on the App Store.">
+<meta property="og:image" content="https://daviddingdev.github.io/poker-appstore-public/img/icon.png">
+<link rel="icon" href="img/icon.png">
+<style>
+  :root{
+    --bg:#ffffff; --text:#1a1d21; --dim:#5b6470; --line:#e4e7eb; --accent:#0b7d67;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0d0d0f; --text:#f5f5f7; --dim:#9aa3ad; --line:#2a2d33; --accent:#45d2b4; }
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font:17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width:560px; margin:0 auto; padding:48px 24px 64px; text-align:center;
+  }
+  .icon{width:112px; height:112px; border-radius:25px; display:block; margin:0 auto 20px;
+    box-shadow:0 6px 24px rgba(0,0,0,.18)}
+  h1{font-size:32px; line-height:1.2; letter-spacing:-.5px}
+  .sub{color:var(--dim); font-size:18px; margin:6px 0 0}
+  /* Apple's rule: clear space of a quarter of the badge's height on every side, at least 40 px tall */
+  .badge{display:inline-block; padding:16px; margin:20px 0 8px}
+  .badge img{height:64px; width:auto; display:block}
+  ul{list-style:none; text-align:left; margin:28px 0 0; border-top:1px solid var(--line)}
+  li{padding:14px 0; border-bottom:1px solid var(--line)}
+  li b{font-weight:650}
+  .note{margin:24px 0 0; color:var(--dim); font-size:15px}
+  a{color:var(--accent)}
+  .foot{margin-top:40px; color:var(--dim); font-size:13px; line-height:1.5}
+  .foot a{color:var(--dim)}
+</style>
+</head>
+<body>
+<img class="icon" src="img/icon.png" alt="Pocket Tells app icon" width="112" height="112">
+<h1>Pocket Tells</h1>
+<p class="sub">Your poker companion. At the table and between games.</p>
+
+<a class="badge" id="get" href="https://apps.apple.com/app/apple-store/id6806831904?pt=129382244&amp;ct=site&amp;mt=8">
+  <img src="img/app-store-badge.svg" alt="Download on the App Store">
+</a>
+
+<ul>
+  <li><b>Practice for free.</b> Raise or fold drills, starting-hand charts and an odds calculator.</li>
+  <li><b>Log the hands that mattered</b> in a few taps, then get them dealt back and decide again.</li>
+  <li><b>Settle the home game.</b> Buy-ins and cash-outs in, the fewest payments out, sent to the group chat.</li>
+</ul>
+
+<p class="note">No account. No subscription. Everything stays on your iPhone.<br>
+Free to download; Pro is a one-time upgrade.</p>
+
+<p class="foot">
+  <a href="support/">Support</a> · <a href="privacy/">Privacy policy</a><br>
+  Apple and the Apple logo are trademarks of Apple Inc., registered in the U.S. and other countries.
+  App Store is a service mark of Apple Inc.
+</p>
+
+<script>
+  // The ad links carry ?ct=<campaign>, so App Store Connect can tell Facebook from Instagram.
+  // Only a short plain token passes; anything else keeps ct=site. Nothing is stored or sent.
+  (function () {
+    var ct = new URLSearchParams(location.search).get('ct');
+    if (ct && /^[a-z0-9-]{1,40}$/.test(ct)) {
+      document.getElementById('get').href =
+        'https://apps.apple.com/app/apple-store/id6806831904?pt=129382244&ct=' + ct + '&mt=8';
+    }
+  })();
+</script>
+</body>
+</html>
